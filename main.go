@@ -1,17 +1,18 @@
 package main
 
 import (
-	"log"
+	"time"
 
-	"github.com/Tariomka/rpi-led-communication/internal/tcp"
+	"github.com/Tariomka/rpi-led-communication/internal/runner"
 )
 
 func main() {
-	server, err := tcp.NewServer(tcp.NewConfig())
+	time.Sleep(time.Second) // Some time for monitoring to start
+	runner, err := runner.NewRunner(runner.NewConfig())
 	if err != nil {
-		log.Fatalf("failed to start server: %v\n", err)
+		panic(err)
 	}
 
-	server.Start()
-	defer server.Stop()
+	runner.Start()
+	defer runner.Stop()
 }

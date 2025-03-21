@@ -14,7 +14,10 @@ import (
 	"github.com/soypat/seqs/stacks"
 )
 
-const maxRetries = 5
+const (
+	maxRetries = 5
+	queueSize  = 3
+)
 
 type Board interface {
 	Connect(ssid, pass, staticIp string) error // Connects to Wi-Fi. Returns an error if connection process fails.
@@ -177,11 +180,6 @@ func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
 }
 
 func (pw *PicoW) handlePackets() {
-	// Maximum number of packets to queue before sending them.
-	const (
-		queueSize                = 3
-		maxRetriesBeforeDropping = 3
-	)
 	var queue [queueSize][cyw43439.MTU]byte
 	var lenBuf [queueSize]int
 	var retries [queueSize]int
@@ -194,10 +192,7 @@ func (pw *PicoW) handlePackets() {
 		stallRx := true
 		// Poll for incoming packets.
 		for i := 0; i < 1; i++ {
-			gotPacket, err := pw.WirelessChip.PollOne()
-			if err != nil {
-				println("poll error:", err.Error())
-			}
+			gotPacket, _ := pw.WirelessChip.PollOne()
 			if !gotPacket {
 				break
 			}
@@ -213,7 +208,6 @@ func (pw *PicoW) handlePackets() {
 			buf := queue[i][:]
 			lenBuf[i], err = pw.stack.HandleEth(buf[:])
 			if err != nil {
-				println("stack error n(should be 0)=", lenBuf[i], "err=", err.Error())
 				lenBuf[i] = 0
 				continue
 			}
@@ -240,9 +234,8 @@ func (pw *PicoW) handlePackets() {
 			if err != nil {
 				// Queue packet for retransmission.
 				retries[i]++
-				if retries[i] > maxRetriesBeforeDropping {
+				if retries[i] > maxRetries {
 					markSent(i)
-					println("dropped outgoing packet:", err.Error())
 				}
 			} else {
 				markSent(i)

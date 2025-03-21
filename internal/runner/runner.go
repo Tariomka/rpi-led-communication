@@ -1,44 +1,14 @@
 package runner
 
 import (
-	_ "embed"
 	"fmt"
-	"strings"
+	"log/slog"
+	"machine"
 
+	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"github.com/Tariomka/rpi-led-communication/internal/controller"
 	"github.com/Tariomka/rpi-led-communication/internal/tcp"
 )
-
-//go:embed .env
-var env string
-
-type RunnerConfig struct {
-	SSID          string
-	Password      string
-	ListenAddress string
-}
-
-func NewConfig() RunnerConfig {
-	return readConfig()
-}
-
-func readConfig() RunnerConfig {
-	config := RunnerConfig{}
-	for _, line := range strings.Split(env, "\n") {
-		split := strings.Split(line, "=")
-		switch split[0] {
-		case "SSID":
-			config.SSID = split[1]
-		case "Password":
-			config.Password = split[1]
-		case "ListenAddress":
-			config.ListenAddress = split[1]
-		default:
-		}
-	}
-
-	return config
-}
 
 type Runner interface {
 	Start()
@@ -49,6 +19,9 @@ type PicoRunner struct {
 	PicoW        controller.Board
 	LayoutWorker controller.LayoutWorker
 	Server       tcp.Server
+
+	settings        RunnerConfig
+	handlingPackets bool
 }
 
 func NewRunner(config RunnerConfig) (Runner, error) {
@@ -59,18 +32,49 @@ func NewRunner(config RunnerConfig) (Runner, error) {
 	// 	return nil, err
 	// }
 
-	return &PicoRunner{
-		PicoW:        controller.NewPicoW(),
+	runner := &PicoRunner{
+		PicoW:        controller.NewPicoW(config.Hostname, config.Logger),
 		LayoutWorker: &controller.LedLayout{},
 		// Server:       server,
-	}, nil
+		settings: config,
+	}
+
+	return runner, nil
 }
 
 func (pr *PicoRunner) Start() {
-	// pr.Server.Start()
-	testOut()
+	if err := pr.connect(); err != nil {
+		// if pr.connect() != nil {
+		panic(err.Error())
+	}
+	if pr.Server == nil {
+		panic("server not initialized")
+	}
+	pr.Server.Start()
+	// testOut()
 }
 
 func (pr *PicoRunner) Stop() {
-	// defer pr.Server.Stop()
+	if pr.Server != nil {
+		defer pr.Server.Stop()
+	}
+}
+
+func (pr *PicoRunner) connect() error {
+	if err := pr.PicoW.Connect(pr.settings.SSID, pr.settings.Password, "192.168.0.169"); err != nil {
+		return err
+	}
+
+	listener, err := pr.PicoW.GetListener(42069)
+	if err != nil {
+		return err
+	}
+
+	pr.Server, err = tcp.NewServer(tcp.ServerConfig{
+		Listener: listener,
+		Logger: slog.New(common.NewLogHandler(
+			func(message string) { machine.USBCDC.Write([]byte(message + "\n")) },
+			&slog.HandlerOptions{Level: slog.LevelDebug})),
+	})
+	return err
 }

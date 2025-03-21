@@ -11,7 +11,9 @@ import (
 )
 
 type ServerConfig struct {
-	Address string
+	Address  string
+	Listener net.Listener
+	Logger   *slog.Logger
 }
 
 func NewConfig() ServerConfig {
@@ -35,16 +37,30 @@ type LedServer struct {
 }
 
 func NewServer(config ServerConfig) (Server, error) {
-	listener, err := net.Listen("tcp", config.Address)
-	if err != nil {
-		return nil, err
+	var (
+		listener net.Listener
+		logger   *slog.Logger
+		err      error
+	)
+
+	listener = config.Listener
+	if listener == nil {
+		listener, err = net.Listen("tcp", config.Address)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	logger = config.Logger
+	if logger == nil {
+		logger = slog.New(common.NewLogHandler(
+			func(message string) { fmt.Println(message) },
+			&slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
 	return &LedServer{
-		logger: slog.New(common.NewLogHandler(
-			func(message string) { fmt.Println(message) },
-			&slog.HandlerOptions{Level: slog.LevelDebug})),
 		listener:  listener,
+		logger:    logger,
 		waitGroup: &sync.WaitGroup{},
 	}, nil
 }

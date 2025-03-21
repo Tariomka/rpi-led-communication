@@ -6,53 +6,101 @@ import (
 	"machine"
 	"net"
 	"net/netip"
+	"os"
 	"time"
 
-	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"github.com/soypat/seqs"
 	"github.com/soypat/seqs/stacks"
 )
 
 func testOut() {
-	// For testing
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 	config := NewConfig()
 	ssid = config.SSID
 	pass = config.Password
-	logger := slog.New(common.NewLogHandler(
-		func(message string) { machine.Serial.Write([]byte(message + "\n")) },
-		&slog.HandlerOptions{Level: slog.LevelInfo}))
-	// &slog.HandlerOptions{Level: slog.LevelDebug - 2}))
-	_, stack, dev, err := SetupWithDHCP(SetupConfig{
+	logger := slog.New(slog.NewTextHandler(machine.USBCDC, &slog.HandlerOptions{
+		Level: slog.LevelDebug - 2}))
+	_, stack, _, err := SetupWithDHCP(SetupConfig{
 		Hostname: "TCP-pico",
 		Logger:   logger,
 		TCPPorts: 1,
 	})
 
-	_ = dev
-	// for i := 0; i < 5; i++ {
-	// 	err = dev.GPIOSet(0, true)
-	// 	if err != nil {
-	// 		println("err", err.Error())
-	// 	} else {
-	// 		println("LED ON")
-	// 	}
-	// 	time.Sleep(500 * time.Millisecond)
-	// 	err = dev.GPIOSet(0, false)
-	// 	if err != nil {
-	// 		println("err", err.Error())
-	// 	} else {
-	// 		println("LED OFF")
-	// 	}
-	// 	time.Sleep(500 * time.Millisecond)
-	// }
-
 	if err != nil {
 		panic("in dhcp setup:" + err.Error())
 	}
+
+	// tcp
+	tcpserver(stack)
+}
+
+// TCP listener test
+func tcplistener(stack *stacks.PortStack, logger *slog.Logger) {
+	const (
+		tcpbufsize  = 512 // MTU - ethhdr - iphdr - tcphdr
+		connTimeout = 5 * time.Second
+		// Can help prevent stalling connections from blocking control the more connections you have.
+		maxconns = 3
+	)
+
+	// Start TCP server.
+	const listenPort = 1234
+	listenAddr := netip.AddrPortFrom(stack.Addr(), listenPort)
+	listener, err := stacks.NewTCPListener(stack, stacks.TCPListenerConfig{
+		MaxConnections: maxconns,
+		ConnTxBufSize:  tcpbufsize,
+		ConnRxBufSize:  tcpbufsize,
+	})
+	if err != nil {
+		panic("listener create:" + err.Error())
+	}
+	err = listener.StartListening(listenPort)
+	if err != nil {
+		panic("listener start:" + err.Error())
+	}
+	var buf [512]byte
+	logger.Info("listening", slog.String("addr", listenAddr.String()))
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			logger.Error("listener accept:", slog.String("err", err.Error()))
+			time.Sleep(time.Second)
+			continue
+		}
+		logger.Info("new connection", slog.String("remote", conn.RemoteAddr().String()))
+		err = conn.SetDeadline(time.Now().Add(connTimeout))
+		if err != nil {
+			logger.Error("conn set deadline:", slog.String("err", err.Error()))
+			continue
+		}
+		for {
+			n, err := conn.Read(buf[:])
+			if err != nil {
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					logger.Error("conn read:", slog.String("err", err.Error()))
+				}
+				break
+			}
+			_, err = conn.Write(buf[:n])
+			if err != nil {
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					logger.Error("conn write:", slog.String("err", err.Error()))
+				}
+				break
+			}
+		}
+		err = conn.Close()
+		if err != nil {
+			logger.Error("conn close:", slog.String("err", err.Error()))
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// TCP server test
+func tcpserver(stack *stacks.PortStack) {
 	// Start TCP server.
 	const socketBuf = 1024
-	// const socketBuf = 256
 	const listenPort = 42069
 	listenAddr := netip.AddrPortFrom(stack.Addr(), listenPort)
 	socket, err := stacks.NewTCPConn(stack, stacks.TCPConnConfig{TxBufSize: socketBuf, RxBufSize: socketBuf})
@@ -60,13 +108,13 @@ func testOut() {
 		panic("socket create:" + err.Error())
 	}
 	println("start listening on:", listenAddr.String())
-	err = ForeverTCPListenEcho(socket, listenAddr)
+	err = foreverTCPListenEcho(socket, listenAddr)
 	if err != nil {
 		panic("socket listen:" + err.Error())
 	}
 }
 
-func ForeverTCPListenEcho(socket *stacks.TCPConn, addr netip.AddrPort) error {
+func foreverTCPListenEcho(socket *stacks.TCPConn, addr netip.AddrPort) error {
 	var iss seqs.Value = 100
 	var buf [512]byte
 	for {

@@ -11,15 +11,8 @@ import (
 )
 
 type ServerConfig struct {
-	Address  string
 	Listener net.Listener
 	Logger   *slog.Logger
-}
-
-func NewConfig() ServerConfig {
-	return ServerConfig{
-		Address: ":42069",
-	}
 }
 
 type Server interface {
@@ -37,30 +30,17 @@ type LedServer struct {
 }
 
 func NewServer(config ServerConfig) (Server, error) {
-	var (
-		listener net.Listener
-		logger   *slog.Logger
-		err      error
-	)
-
-	listener = config.Listener
-	if listener == nil {
-		listener, err = net.Listen("tcp", config.Address)
-		if err != nil {
-			return nil, err
-		}
+	if config.Listener == nil {
+		return nil, common.ErrNoListener
 	}
 
-	logger = config.Logger
-	if logger == nil {
-		logger = slog.New(common.NewLogHandler(
-			func(message string) { fmt.Println(message) },
-			&slog.HandlerOptions{Level: slog.LevelDebug}))
+	if config.Logger == nil {
+		config.Logger = common.NewConsoleLogger(slog.LevelDebug)
 	}
 
 	return &LedServer{
-		listener:  listener,
-		logger:    logger,
+		listener:  config.Listener,
+		logger:    config.Logger,
 		waitGroup: &sync.WaitGroup{},
 	}, nil
 }
@@ -77,7 +57,8 @@ func (ls *LedServer) Start() {
 
 		connWrapper := NewConnection(connection, ls.waitGroup)
 		ls.conns.Store(connWrapper, true)
-		ls.logger.Debug("new connection aquired:",
+		ls.logger.Debug(
+			"new connection aquired:",
 			"connection", connWrapper.connection.RemoteAddr())
 
 		go ls.receive(connWrapper)
@@ -103,14 +84,17 @@ func (ls *LedServer) receive(connection *Connection) {
 		if err != nil {
 			switch err {
 			case io.EOF:
-				ls.logger.Info("user disconnected:", "connection", connection.connection.RemoteAddr())
+				ls.logger.Info(
+					"user disconnected:",
+					"connection", connection.connection.RemoteAddr())
 			default:
 				ls.logger.Error("failed to read data from connection:", "error", err)
 			}
 			break
 		}
 
-		ls.logger.Debug("received data:",
+		ls.logger.Debug(
+			"received data:",
 			"version", packet.Version,
 			"type", packet.Type,
 			"data", string(packet.Data))

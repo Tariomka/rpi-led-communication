@@ -8,11 +8,7 @@ import (
 
 func main() {
 	time.Sleep(time.Second) // Some time for monitoring to start
-	runner, err := runner.NewRunner(runner.NewConfig().WithStructuredLogger())
-	if err != nil {
-		panic(err)
-	}
-
+	runner := runner.NewRunner(runner.NewConfig().WithStructuredLogger())
 	runner.Start()
 	defer runner.Stop()
 }

@@ -2,22 +2,24 @@ package runner
 
 import (
 	_ "embed"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"machine"
-	"strings"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 )
 
-//go:embed .env
-var env string
+//go:embed config.json
+var config []byte
 
 type RunnerConfig struct {
-	SSID          string // From .env file
-	Password      string // From .env file
-	ListenAddress string // From .env file
-	Hostname      string // From .env file
+	SSID     string `json:"SSID"`
+	Password string `json:"Password"`
+	IP       string `json:"IP"`
+	Port     int    `json:"Port"`
+	Hostname string `json:"Hostname"`
 
 	Logger *slog.Logger
 }
@@ -27,40 +29,24 @@ func NewConfig() RunnerConfig {
 }
 
 func readEmbededConfig() RunnerConfig {
-	config := RunnerConfig{}
-	for _, line := range strings.Split(env, "\n") {
-		split := strings.Split(line, "=")
-		switch split[0] {
-		case "SSID":
-			config.SSID = split[1]
-		case "Password":
-			config.Password = split[1]
-		case "ListenAddress":
-			config.ListenAddress = split[1]
-		case "Hostname":
-			config.Hostname = split[1]
-		default:
-		}
+	var rc RunnerConfig
+	if err := json.Unmarshal(config, &rc); err != nil {
+		fmt.Errorf("failed to parse config", "err", err.Error())
 	}
-
-	return config
+	return rc
 }
 
 func (rc RunnerConfig) WithStructuredLogger() RunnerConfig {
-	rc.Logger = slog.New(common.NewLogHandler(
-		func(message string) { machine.USBCDC.Write([]byte(message + "\n")) },
-		&slog.HandlerOptions{Level: slog.LevelInfo}))
+	rc.Logger = common.NewStructuredLogger(machine.USBCDC, slog.LevelInfo)
 	return rc
 }
 
 func (rc RunnerConfig) WithDebugLogger() RunnerConfig {
-	rc.Logger = slog.New(slog.NewTextHandler(
-		machine.USBCDC,
-		&slog.HandlerOptions{Level: slog.LevelDebug - 2}))
+	rc.Logger = common.NewSimpleLogger(machine.USBCDC, slog.LevelDebug-2)
 	return rc
 }
 
 func (rc RunnerConfig) WithLogger(writer io.Writer, level slog.Level) RunnerConfig {
-	rc.Logger = slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{Level: level}))
+	rc.Logger = common.NewSimpleLogger(writer, level)
 	return rc
 }

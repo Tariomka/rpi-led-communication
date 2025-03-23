@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"fmt"
 	"log/slog"
 	"machine"
 
@@ -24,34 +23,24 @@ type PicoRunner struct {
 	handlingPackets bool
 }
 
-func NewRunner(config RunnerConfig) (Runner, error) {
-	fmt.Printf("Data: %s\n", config)
-
-	// server, err := tcp.NewServer(tcp.ServerConfig{Address: config.ListenAddress})
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	runner := &PicoRunner{
+func NewRunner(config RunnerConfig) Runner {
+	return &PicoRunner{
 		PicoW:        controller.NewPicoW(config.Hostname, config.Logger),
 		LayoutWorker: &controller.LedLayout{},
-		// Server:       server,
-		settings: config,
+		settings:     config,
 	}
-
-	return runner, nil
 }
 
 func (pr *PicoRunner) Start() {
 	if err := pr.connect(); err != nil {
-		// if pr.connect() != nil {
 		panic(err.Error())
 	}
+
 	if pr.Server == nil {
-		panic("server not initialized")
+		panic(common.ErrServerNotInitialized.Error())
 	}
+
 	pr.Server.Start()
-	// testOut()
 }
 
 func (pr *PicoRunner) Stop() {
@@ -61,20 +50,18 @@ func (pr *PicoRunner) Stop() {
 }
 
 func (pr *PicoRunner) connect() error {
-	if err := pr.PicoW.Connect(pr.settings.SSID, pr.settings.Password, "192.168.0.169"); err != nil {
+	if err := pr.PicoW.Connect(pr.settings.SSID, pr.settings.Password, pr.settings.IP); err != nil {
 		return err
 	}
 
-	listener, err := pr.PicoW.GetListener(42069)
+	listener, err := pr.PicoW.GetListener(uint16(pr.settings.Port))
 	if err != nil {
 		return err
 	}
 
 	pr.Server, err = tcp.NewServer(tcp.ServerConfig{
 		Listener: listener,
-		Logger: slog.New(common.NewLogHandler(
-			func(message string) { machine.USBCDC.Write([]byte(message + "\n")) },
-			&slog.HandlerOptions{Level: slog.LevelDebug})),
+		Logger:   common.NewStructuredLogger(machine.USBCDC, slog.LevelDebug),
 	})
 	return err
 }

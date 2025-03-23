@@ -13,6 +13,7 @@ build/
 *.dylib
 *.elf
 *.hex
+*.uf2
 
 # Test binary, built with `go test -c`
 *.test
@@ -29,3 +30,4 @@ go.work.sum
 
 # env file
 .env
+internal/runner/config.json

@@ -1,14 +1,13 @@
 package controller
 
 import (
-	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"net/netip"
 	"strings"
 	"time"
 
+	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"github.com/soypat/cyw43439"
 	"github.com/soypat/seqs/eth/dhcp"
 	"github.com/soypat/seqs/stacks"
@@ -21,6 +20,7 @@ const (
 
 type Board interface {
 	Connect(ssid, pass, staticIp string) error // Connects to Wi-Fi. Returns an error if connection process fails.
+	DHCPRequest(staticIp string) error
 	GetListener(listenPort uint16) (net.Listener, error)
 }
 
@@ -35,10 +35,7 @@ type PicoW struct {
 
 func NewPicoW(hostname string, logger *slog.Logger) Board {
 	if logger == nil {
-		// Default empty logger
-		logger = slog.New(slog.NewTextHandler(
-			io.Discard,
-			&slog.HandlerOptions{Level: slog.Level(64)}))
+		logger = common.NewNoopLogger()
 	}
 	if strings.TrimSpace(hostname) == "" {
 		hostname = "PicoW"
@@ -72,6 +69,10 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		time.Sleep(5 * time.Second)
 	}
 
+	if err != nil {
+		return err
+	}
+
 	mac, err := pw.WirelessChip.HardwareAddr6()
 	if err != nil {
 		return err
@@ -84,7 +85,6 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		MTU:             cyw43439.MTU,
 		Logger:          pw.logger,
 	})
-
 	pw.WirelessChip.RecvEthHandle(pw.stack.RecvEth)
 
 	go pw.handlePackets()
@@ -113,7 +113,6 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		}
 	}
 
-	// Perform DHCP request.
 	dhcpClient := stacks.NewDHCPClient(pw.stack, dhcp.DefaultClientPort)
 	dhcpConfig := stacks.DHCPRequestConfig{
 		RequestedAddr: requestedAddress,
@@ -123,12 +122,16 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 	if err = dhcpClient.BeginRequest(dhcpConfig); err != nil {
 		return err
 	}
+
 	for i := 0; i < maxRetries && dhcpClient.State() != dhcp.StateBound; i++ {
 		time.Sleep(time.Second / 2)
 		if i > 15 {
 			if !requestedAddress.IsValid() {
-				return errors.New("DHCP did not complete and no static IP was requested")
+				pw.logger.Error("DHCP did not complete and no static IP was requested")
+				return common.ErrDhcpRequestFailed
 			}
+
+			pw.logger.Warn("DHCP did not complete, falling back to static IP")
 			pw.stack.SetAddr(requestedAddress)
 			return nil
 		}
@@ -139,7 +142,8 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		primaryDNS = dnsServers[0]
 	}
 	ip := dhcpClient.Offer()
-	pw.logger.Info("DHCP complete",
+	pw.logger.Info(
+		"DHCP complete",
 		slog.Uint64("cidrbits", uint64(dhcpClient.CIDRBits())),
 		slog.String("ourIP", ip.String()),
 		slog.String("dns", primaryDNS.String()),
@@ -161,8 +165,9 @@ func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
 	tcpbufsize := uint16(512) // MTU - ethhdr - iphdr - tcphdr
 
 	if pw.stack == nil {
-		return nil, errors.New("did not connect to internet")
+		return nil, common.ErrNoInternetConnection
 	}
+
 	listener, err := stacks.NewTCPListener(pw.stack, stacks.TCPListenerConfig{
 		MaxConnections: 3,
 		ConnTxBufSize:  tcpbufsize,
@@ -171,6 +176,7 @@ func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	err = listener.StartListening(listenPort)
 	if err != nil {
 		return nil, err

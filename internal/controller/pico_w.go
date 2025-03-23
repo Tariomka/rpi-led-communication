@@ -48,7 +48,8 @@ func NewPicoW(hostname string, logger *slog.Logger) Board {
 	}
 
 	config := cyw43439.DefaultWifiBluetoothConfig()
-	config.Logger = logger
+	config.Logger = common.NewNoopLogger()
+	// config.Logger = common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn)
 	if err := board.WirelessChip.Init(config); err != nil {
 		panic("Failed to initialize Pico W wireless interface: " + err.Error())
 	}
@@ -83,10 +84,10 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		MaxOpenPortsUDP: 1,
 		MaxOpenPortsTCP: 1,
 		MTU:             cyw43439.MTU,
-		Logger:          pw.logger,
+		// Logger:          common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn),
+		Logger: common.NewNoopLogger(),
 	})
 	pw.WirelessChip.RecvEthHandle(pw.stack.RecvEth)
-
 	go pw.handlePackets()
 
 	if strings.TrimSpace(staticIp) == "" {

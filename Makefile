@@ -20,7 +20,7 @@ monitor:
 
 build: create
 	@echo Starting to compile Tinygo binary, please wait...
-	@tinygo build -o ./$(BIN_DIR)/$(BIN_NAME).uf2 -target=bluepill-clone ./main.go
+	@tinygo build -o ./$(BIN_DIR)/$(BIN_NAME).uf2 -target=pico-w ./main.go
 	@echo Build finished.
 
 build_version: create

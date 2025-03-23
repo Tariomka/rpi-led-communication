@@ -84,8 +84,8 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		MaxOpenPortsUDP: 1,
 		MaxOpenPortsTCP: 1,
 		MTU:             cyw43439.MTU,
-		// Logger:          common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn),
-		Logger: common.NewNoopLogger(),
+		Logger:          common.NewNoopLogger(),
+		// Logger: common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn),
 	})
 	pw.WirelessChip.RecvEthHandle(pw.stack.RecvEth)
 	go pw.handlePackets()

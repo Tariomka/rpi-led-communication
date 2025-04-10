@@ -31,35 +31,39 @@ func NewRunner(config RunnerConfig) Runner {
 	}
 }
 
-func (pr *PicoRunner) Start() {
-	if err := pr.connect(); err != nil {
+func (this *PicoRunner) Start() {
+	if err := this.connect(); err != nil {
 		panic(err.Error())
 	}
 
-	if pr.Server == nil {
+	this.PicoW.Blink(3)
+	if this.Server == nil {
 		panic(common.ErrServerNotInitialized.Error())
 	}
 
-	pr.Server.Start()
+	this.PicoW.TurnLed(true)
+	this.Server.Start()
 }
 
-func (pr *PicoRunner) Stop() {
-	if pr.Server != nil {
-		defer pr.Server.Stop()
+func (this *PicoRunner) Stop() {
+	if this.Server != nil {
+		defer this.Server.Stop()
 	}
 }
 
-func (pr *PicoRunner) connect() error {
-	if err := pr.PicoW.Connect(pr.settings.SSID, pr.settings.Password, pr.settings.IP); err != nil {
+func (this *PicoRunner) connect() error {
+	if err := this.PicoW.Connect(this.settings.SSID, this.settings.Password, this.settings.IP); err != nil {
 		return err
 	}
 
-	listener, err := pr.PicoW.GetListener(uint16(pr.settings.Port))
+	this.PicoW.Blink(1)
+	listener, err := this.PicoW.GetListener(uint16(this.settings.Port))
 	if err != nil {
 		return err
 	}
 
-	pr.Server, err = tcp.NewServer(tcp.ServerConfig{
+	this.PicoW.Blink(1)
+	this.Server, err = tcp.NewServer(tcp.ServerConfig{
 		Listener: listener,
 		Logger:   common.NewStructuredLogger(machine.USBCDC, slog.LevelDebug),
 	})

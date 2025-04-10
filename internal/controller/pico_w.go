@@ -22,6 +22,9 @@ type Board interface {
 	Connect(ssid, pass, staticIp string) error // Connects to Wi-Fi. Returns an error if connection process fails.
 	DHCPRequest(staticIp string) error
 	GetListener(listenPort uint16) (net.Listener, error)
+
+	Blink(times uint)
+	TurnLed(on bool)
 }
 
 type PicoW struct {
@@ -29,8 +32,9 @@ type PicoW struct {
 	stack        *stacks.PortStack
 	dhcp         *dhcp.ClientState
 
-	logger   *slog.Logger
-	hostname string
+	logger    *slog.Logger
+	hostname  string
+	ledStatus bool
 }
 
 func NewPicoW(hostname string, logger *slog.Logger) Board {
@@ -54,19 +58,20 @@ func NewPicoW(hostname string, logger *slog.Logger) Board {
 		panic("Failed to initialize Pico W wireless interface: " + err.Error())
 	}
 
+	board.Blink(2)
 	return &board
 }
 
-func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
+func (this *PicoW) Connect(ssid, pass, staticIp string) error {
 	var err error
 	var requestedAddress netip.Addr
 
 	for i := 0; i < maxRetries; i++ {
-		err = pw.WirelessChip.JoinWPA2(ssid, pass)
+		err = this.WirelessChip.JoinWPA2(ssid, pass)
 		if err == nil {
 			break
 		}
-		pw.logger.Error("wifi join failed", "err", err.Error())
+		this.logger.Error("wifi join failed", "err", err.Error())
 		time.Sleep(5 * time.Second)
 	}
 
@@ -74,12 +79,12 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		return err
 	}
 
-	mac, err := pw.WirelessChip.HardwareAddr6()
+	mac, err := this.WirelessChip.HardwareAddr6()
 	if err != nil {
 		return err
 	}
 
-	pw.stack = stacks.NewPortStack(stacks.PortStackConfig{
+	this.stack = stacks.NewPortStack(stacks.PortStackConfig{
 		MAC:             mac,
 		MaxOpenPortsUDP: 1,
 		MaxOpenPortsTCP: 1,
@@ -87,8 +92,8 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		Logger:          common.NewNoopLogger(),
 		// Logger: common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn),
 	})
-	pw.WirelessChip.RecvEthHandle(pw.stack.RecvEth)
-	go pw.handlePackets()
+	this.WirelessChip.RecvEthHandle(this.stack.RecvEth)
+	go this.handlePackets()
 
 	if strings.TrimSpace(staticIp) == "" {
 		return nil
@@ -99,11 +104,11 @@ func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
 		return err
 	}
 
-	pw.stack.SetAddr(requestedAddress)
+	this.stack.SetAddr(requestedAddress)
 	return nil
 }
 
-func (pw *PicoW) DHCPRequest(staticIp string) error {
+func (this *PicoW) DHCPRequest(staticIp string) error {
 	var err error
 	var requestedAddress netip.Addr
 
@@ -114,11 +119,11 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		}
 	}
 
-	dhcpClient := stacks.NewDHCPClient(pw.stack, dhcp.DefaultClientPort)
+	dhcpClient := stacks.NewDHCPClient(this.stack, dhcp.DefaultClientPort)
 	dhcpConfig := stacks.DHCPRequestConfig{
 		RequestedAddr: requestedAddress,
 		Xid:           uint32(time.Now().Nanosecond()),
-		Hostname:      pw.hostname,
+		Hostname:      this.hostname,
 	}
 	if err = dhcpClient.BeginRequest(dhcpConfig); err != nil {
 		return err
@@ -128,12 +133,12 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		time.Sleep(time.Second / 2)
 		if i > 15 {
 			if !requestedAddress.IsValid() {
-				pw.logger.Error("DHCP did not complete and no static IP was requested")
+				this.logger.Error("DHCP did not complete and no static IP was requested")
 				return common.ErrDhcpRequestFailed
 			}
 
-			pw.logger.Warn("DHCP did not complete, falling back to static IP")
-			pw.stack.SetAddr(requestedAddress)
+			this.logger.Warn("DHCP did not complete, falling back to static IP")
+			this.stack.SetAddr(requestedAddress)
 			return nil
 		}
 	}
@@ -143,7 +148,7 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		primaryDNS = dnsServers[0]
 	}
 	ip := dhcpClient.Offer()
-	pw.logger.Info(
+	this.logger.Info(
 		"DHCP complete",
 		slog.Uint64("cidrbits", uint64(dhcpClient.CIDRBits())),
 		slog.String("ourIP", ip.String()),
@@ -158,18 +163,18 @@ func (pw *PicoW) DHCPRequest(staticIp string) error {
 		slog.Duration("rebinding", dhcpClient.RebindingTime()),
 	)
 
-	pw.stack.SetAddr(ip) // It's important to set the IP address after DHCP completes.
+	this.stack.SetAddr(ip) // It's important to set the IP address after DHCP completes.
 	return nil
 }
 
-func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
+func (this *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
 	tcpbufsize := uint16(512) // MTU - ethhdr - iphdr - tcphdr
 
-	if pw.stack == nil {
+	if this.stack == nil {
 		return nil, common.ErrNoInternetConnection
 	}
 
-	listener, err := stacks.NewTCPListener(pw.stack, stacks.TCPListenerConfig{
+	listener, err := stacks.NewTCPListener(this.stack, stacks.TCPListenerConfig{
 		MaxConnections: 3,
 		ConnTxBufSize:  tcpbufsize,
 		ConnRxBufSize:  tcpbufsize,
@@ -186,7 +191,22 @@ func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
 	return listener, nil
 }
 
-func (pw *PicoW) handlePackets() {
+func (this *PicoW) Blink(times uint) {
+	for range times {
+		this.WirelessChip.GPIOSet(0, !this.ledStatus)
+		time.Sleep(125 * time.Millisecond)
+		this.WirelessChip.GPIOSet(0, this.ledStatus)
+		time.Sleep(125 * time.Millisecond)
+	}
+}
+
+func (this *PicoW) TurnLed(on bool) {
+	this.ledStatus = on
+	this.WirelessChip.GPIOSet(0, this.ledStatus)
+}
+
+// Haven't checked what this does, it is taken from the example
+func (this *PicoW) handlePackets() {
 	var queue [queueSize][cyw43439.MTU]byte
 	var lenBuf [queueSize]int
 	var retries [queueSize]int
@@ -199,7 +219,7 @@ func (pw *PicoW) handlePackets() {
 		stallRx := true
 		// Poll for incoming packets.
 		for i := 0; i < 1; i++ {
-			gotPacket, _ := pw.WirelessChip.PollOne()
+			gotPacket, _ := this.WirelessChip.PollOne()
 			if !gotPacket {
 				break
 			}
@@ -213,7 +233,7 @@ func (pw *PicoW) handlePackets() {
 			}
 			var err error
 			buf := queue[i][:]
-			lenBuf[i], err = pw.stack.HandleEth(buf[:])
+			lenBuf[i], err = this.stack.HandleEth(buf[:])
 			if err != nil {
 				lenBuf[i] = 0
 				continue
@@ -237,7 +257,7 @@ func (pw *PicoW) handlePackets() {
 			if n <= 0 {
 				continue
 			}
-			err := pw.WirelessChip.SendEth(queue[i][:n])
+			err := this.WirelessChip.SendEth(queue[i][:n])
 			if err != nil {
 				// Queue packet for retransmission.
 				retries[i]++

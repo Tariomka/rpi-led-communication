@@ -17,8 +17,8 @@ var config []byte
 type RunnerConfig struct {
 	SSID     string `json:"SSID"`
 	Password string `json:"Password"`
-	IP       string `json:"IP"`
-	Port     int    `json:"Port"`
+	IP       string `json:"IP,omitempty"`
+	Port     uint16 `json:"Port"`
 	Hostname string `json:"Hostname"`
 
 	Logger *slog.Logger
@@ -31,22 +31,22 @@ func NewConfig() RunnerConfig {
 func readEmbededConfig() RunnerConfig {
 	var rc RunnerConfig
 	if err := json.Unmarshal(config, &rc); err != nil {
-		fmt.Errorf("failed to parse config", "err", err.Error())
+		fmt.Printf("failed to parse config: %s\n", err.Error())
 	}
 	return rc
 }
 
-func (rc RunnerConfig) WithStructuredLogger() RunnerConfig {
-	rc.Logger = common.NewStructuredLogger(machine.USBCDC, slog.LevelInfo)
-	return rc
+func (this RunnerConfig) WithStructuredLogger() RunnerConfig {
+	this.Logger = common.NewStructuredLogger(machine.USBCDC, slog.LevelInfo)
+	return this
 }
 
-func (rc RunnerConfig) WithDebugLogger() RunnerConfig {
-	rc.Logger = common.NewSimpleLogger(machine.USBCDC, slog.LevelDebug-2)
-	return rc
+func (this RunnerConfig) WithDebugLogger() RunnerConfig {
+	this.Logger = common.NewSimpleLogger(machine.USBCDC, slog.LevelDebug-2)
+	return this
 }
 
-func (rc RunnerConfig) WithLogger(writer io.Writer, level slog.Level) RunnerConfig {
-	rc.Logger = common.NewSimpleLogger(writer, level)
-	return rc
+func (this RunnerConfig) WithLogger(writer io.Writer, level slog.Level) RunnerConfig {
+	this.Logger = common.NewSimpleLogger(writer, level)
+	return this
 }

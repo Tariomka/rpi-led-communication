@@ -1,3 +1,5 @@
+github.com/Tariomka/led-common-lib v0.1.0 h1:ok8G4RVFjb2VIQQyTRRCbNKuG0SEicU3XWjn2lglfVI=
+github.com/Tariomka/led-common-lib v0.1.0/go.mod h1:1pmGz2ee4V2m3dfDrc2j3gU+tE8rwKEG1Qq4lBxxak4=
 github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50 h1:PgHnB1SZUXV6HuaM9XLddb3xsnOtx4JrfpDZpmuYQ68=
 github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50/go.mod h1:MUaGO5m6X7xrkHrPDmnaxCEcuCCFN/0ZFh9oie+exbU=
 github.com/soypat/seqs v0.0.0-20250124201400-0d65bc7c1710 h1:Y9fBuiR/urFY/m76+SAZTxk2xAOS2n85f+H1CugajeA=

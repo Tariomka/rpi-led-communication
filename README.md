@@ -1,6 +1,6 @@
 # Requirements
 
-1. Go v1.23.6 or above: [download link](https://go.dev/doc/install).
+1. Go v1.24.2 or above: [download link](https://go.dev/doc/install).
 2. Tinygo v0.36.0 or above: [installation instructions](https://tinygo.org/getting-started/install/).
 3. Code editor, ex. VS Code.
 4. GNU Make.

@@ -7,6 +7,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 )
 
@@ -74,7 +75,7 @@ func (ls *LedServer) Stop() {
 }
 
 func (ls *LedServer) Send(message string) {
-	ls.broadcast(NewMessagePacket(message))
+	ls.broadcast(network.NewMessagePacket(message))
 }
 
 func (ls *LedServer) receive(connection *Connection) {
@@ -101,7 +102,7 @@ func (ls *LedServer) receive(connection *Connection) {
 	}
 }
 
-func (ls *LedServer) broadcast(packet Packet) {
+func (ls *LedServer) broadcast(packet network.Packet) {
 	for connection := range ls.conns.Range {
 		connection.(*Connection).WritePacket(packet)
 	}

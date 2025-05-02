@@ -3,6 +3,8 @@ package tcp
 import (
 	"net"
 	"sync"
+
+	"github.com/Tariomka/led-common-lib/pkg/network"
 )
 
 type Connection struct {
@@ -19,7 +21,7 @@ func NewConnection(connection net.Conn, waitGroup *sync.WaitGroup) *Connection {
 	}
 }
 
-func (c *Connection) ReadPacket() (*Packet, error) {
+func (c *Connection) ReadPacket() (*network.Packet, error) {
 	// Add multiple packet reading?
 	// read with buffer? how current implementation reads multiple packets?
 	buffer := make([]byte, 1024)
@@ -28,7 +30,7 @@ func (c *Connection) ReadPacket() (*Packet, error) {
 		return nil, err
 	}
 
-	packet, err := UnmarshallPacket(buffer)
+	packet, err := network.UnmarshallPacket(buffer)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +38,7 @@ func (c *Connection) ReadPacket() (*Packet, error) {
 	return packet, nil
 }
 
-func (c *Connection) WritePacket(packet Packet) {
+func (c *Connection) WritePacket(packet network.Packet) {
 	// TODO: add more handling?
 	c.connection.Write(packet.Marshall())
 }

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"machine"
 
+	"github.com/Tariomka/led-common-lib/pkg/led"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"github.com/Tariomka/rpi-led-communication/internal/controller"
 	"github.com/Tariomka/rpi-led-communication/internal/tcp"
@@ -16,7 +17,7 @@ type Runner interface {
 
 type PicoRunner struct {
 	PicoW        controller.Board
-	LayoutWorker controller.LayoutWorker
+	LayoutWorker led.LayoutWorker
 	Server       tcp.Server
 
 	settings        RunnerConfig
@@ -26,7 +27,7 @@ type PicoRunner struct {
 func NewRunner(config RunnerConfig) Runner {
 	return &PicoRunner{
 		PicoW:        controller.NewPicoW(config.Hostname, config.Logger),
-		LayoutWorker: &controller.LedLayout{},
+		LayoutWorker: &led.LedLayout{},
 		settings:     config,
 	}
 }

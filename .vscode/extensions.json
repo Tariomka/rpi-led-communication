@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "golang.go",
+        "bierner.github-markdown-preview",
+        "gruntfuggly.todo-tree",
+        "tinygo.vscode-tinygo",
+        "ms-vscode.makefile-tools"
+    ]
+}

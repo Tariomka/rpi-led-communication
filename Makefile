@@ -10,6 +10,7 @@ endif
 
 flash:
 	@echo Starting to flash Tinygo binary to Raspberry PI Pico, please wait...
+	@echo If prompted please remount Raspberry PI Pico
 	@tinygo flash -target=pico-w -size full ./main.go
 	@echo Flashing finished.
 	@echo Starting monitoring:

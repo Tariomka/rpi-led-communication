@@ -1,7 +1,6 @@
 package tcp
 
 import (
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -10,11 +9,6 @@ import (
 	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 )
-
-type ServerConfig struct {
-	Listener net.Listener
-	Logger   *slog.Logger
-}
 
 type Server interface {
 	Start()
@@ -27,88 +21,103 @@ type LedServer struct {
 	logger   *slog.Logger
 
 	waitGroup *sync.WaitGroup
-	conns     sync.Map
+	conns     sync.Map // Map of [*Connection]bool.
 }
 
-func NewServer(config ServerConfig) (Server, error) {
-	if config.Listener == nil {
+func NewServer(listener net.Listener, logger *slog.Logger) (Server, error) {
+	if listener == nil {
 		return nil, common.ErrNoListener
 	}
 
-	if config.Logger == nil {
-		config.Logger = common.NewConsoleLogger(slog.LevelDebug)
+	if logger == nil {
+		logger = common.NewConsoleLogger(slog.LevelDebug)
 	}
-
 	return &LedServer{
-		listener:  config.Listener,
-		logger:    config.Logger,
+		listener:  listener,
+		logger:    logger,
 		waitGroup: &sync.WaitGroup{},
 	}, nil
 }
 
-func (ls *LedServer) Start() {
-	ls.logger.Debug("Starting up server")
-	fmt.Println()
+func (this *LedServer) Start() {
+	this.logger.Debug("Starting up server")
 	for {
-		connection, err := ls.listener.Accept()
+		connection, err := this.listener.Accept()
 		if err != nil {
-			ls.logger.Error("failed to accept connection:", "error", err)
+			this.logger.Error("Failed to accept connection:", "error", err)
 			break
 		}
 
-		connWrapper := NewConnection(connection, ls.waitGroup)
-		ls.conns.Store(connWrapper, true)
-		ls.logger.Debug(
-			"new connection aquired:",
+		connWrapper := NewConnection(connection, this.waitGroup)
+		if connWrapper == nil {
+			continue
+		}
+
+		this.conns.Store(connWrapper, true)
+		this.logger.Debug(
+			"New connection aquired:",
 			"connection", connWrapper.connection.RemoteAddr())
 
-		go ls.receive(connWrapper)
+		go this.receive(connWrapper)
 	}
-	ls.waitGroup.Wait()
+	this.waitGroup.Wait()
 }
 
-func (ls *LedServer) Stop() {
-	for connection := range ls.conns.Range {
+func (this *LedServer) Stop() {
+	for connection := range this.conns.Range {
 		connection.(*Connection).Close()
 	}
-	ls.listener.Close()
+	this.listener.Close()
 }
 
-func (ls *LedServer) Send(message string) {
-	ls.broadcast(network.NewMessagePacket(message))
+func (this *LedServer) Send(message string) {
+	this.broadcast(network.NewMessagePacket(message))
 }
 
-func (ls *LedServer) receive(connection *Connection) {
-	defer ls.removeConnection(connection)
+func (this *LedServer) receive(connection *Connection) {
+	defer this.removeConnection(connection)
 	for {
 		packet, err := connection.ReadPacket()
 		if err != nil {
 			switch err {
 			case io.EOF:
-				ls.logger.Info(
-					"user disconnected:",
+				this.logger.Info(
+					"User disconnected:",
 					"connection", connection.connection.RemoteAddr())
 			default:
-				ls.logger.Error("failed to read data from connection:", "error", err)
+				this.logger.Error("Failed to read data from connection:", "error", err)
 			}
 			break
 		}
 
-		ls.logger.Debug(
-			"received data:",
+		if packet.Version != network.V1 {
+			this.logger.Error("Unsupported packet version", "packet version", packet.Version)
+			connection.WritePacket(network.NewMessagePacket("Package is incorrect and was denied"))
+			continue
+		}
+
+		if packet.Type == network.Message {
+			this.logger.Info("Message from client received", "message", string(packet.Data))
+			continue
+		}
+
+		// TODO: send to packet handler fucntion/class
+		// TODO: send state to stm32 via UART
+		this.logger.Debug(
+			"Received data",
 			"version", packet.Version,
 			"type", packet.Type,
-			"data", string(packet.Data))
+			"data", packet.Data)
 	}
 }
 
-func (ls *LedServer) broadcast(packet network.Packet) {
-	for connection := range ls.conns.Range {
+func (this *LedServer) broadcast(packet network.Packet) {
+	for connection := range this.conns.Range {
 		connection.(*Connection).WritePacket(packet)
 	}
 }
 
-func (ls *LedServer) removeConnection(conn *Connection) {
+func (this *LedServer) removeConnection(conn *Connection) {
 	conn.Close()
-	ls.conns.Delete(conn)
+	this.conns.Delete(conn)
 }

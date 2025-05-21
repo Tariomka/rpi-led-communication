@@ -19,30 +19,30 @@ type PicoRunner struct {
 	PicoW        controller.Board
 	LayoutWorker led.LayoutWorker
 	Server       tcp.Server
-
-	settings        RunnerConfig
-	handlingPackets bool
+	Logger       *slog.Logger
 }
 
 func NewRunner(config RunnerConfig) Runner {
+	logger := common.NewStructuredLogger(machine.USBCDC, slog.LevelDebug)
 	return &PicoRunner{
-		PicoW:        controller.NewPicoW(config.Hostname, config.Logger),
+		PicoW:        controller.NewPicoW(controller.PicoConfig(config), logger),
 		LayoutWorker: &led.LedLayout{},
-		settings:     config,
+		Logger:       logger,
 	}
 }
 
 func (this *PicoRunner) Start() {
-	if err := this.connect(); err != nil {
+	if err := this.connectAndListen(); err != nil {
 		panic(err.Error())
 	}
 
-	this.PicoW.Blink(3)
+	this.PicoW.Blink(1)
 	if this.Server == nil {
 		panic(common.ErrServerNotInitialized.Error())
 	}
 
 	this.PicoW.TurnLed(true)
+	go this.PicoW.ListenToUart()
 	this.Server.Start()
 }
 
@@ -52,21 +52,18 @@ func (this *PicoRunner) Stop() {
 	}
 }
 
-func (this *PicoRunner) connect() error {
-	if err := this.PicoW.Connect(this.settings.SSID, this.settings.Password, this.settings.IP); err != nil {
+func (this *PicoRunner) connectAndListen() error {
+	if err := this.PicoW.Connect(); err != nil {
 		return err
 	}
 
 	this.PicoW.Blink(1)
-	listener, err := this.PicoW.GetListener(uint16(this.settings.Port))
+	listener, err := this.PicoW.GetListener()
 	if err != nil {
 		return err
 	}
 
 	this.PicoW.Blink(1)
-	this.Server, err = tcp.NewServer(tcp.ServerConfig{
-		Listener: listener,
-		Logger:   common.NewStructuredLogger(machine.USBCDC, slog.LevelDebug),
-	})
+	this.Server, err = tcp.NewServer(listener, this.Logger)
 	return err
 }

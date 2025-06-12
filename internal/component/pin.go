@@ -20,17 +20,13 @@ func NewOutputPin(pin machine.Pin) OutputPin {
 	return output
 }
 
-type UART struct {
-	*machine.UART
-	power OutputPin
-}
+type UART struct{ *machine.UART }
 
 func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
-	device := UART{
-		UART:  uart,
-		power: NewOutputPin(powerPin),
-	}
+	device := UART{UART: uart}
 	device.Configure(machine.UARTConfig{})
-	device.power.Pin.High()
+
+	NewOutputPin(powerPin).High()
+
 	return device
 }

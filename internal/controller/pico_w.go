@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"machine"
 	"net"
+	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/component"
 )
@@ -11,7 +12,8 @@ import (
 type Board interface {
 	Connect() error // Connects to Wi-Fi. Returns an error if connection process fails.
 	GetListener() (net.Listener, error)
-	ListenToUart()
+	ReceiveFromUart()
+	SentToUart(message string)
 	Blink(times uint)
 	TurnLed(on bool)
 }
@@ -29,6 +31,8 @@ type PicoW struct {
 	uart         component.UART
 
 	logger *slog.Logger
+
+	buffer []byte
 	config PicoConfig
 }
 
@@ -37,6 +41,7 @@ func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
 		wirelessChip: component.NewWirelessChip(logger),
 		uart:         component.NewConfiguredUart(machine.UART0, machine.GP3),
 		logger:       logger,
+		buffer:       make([]byte, 1024),
 		config:       config,
 	}
 }
@@ -53,21 +58,36 @@ func (this *PicoW) GetListener() (net.Listener, error) {
 	return this.wirelessChip.GetListener(this.config.Port)
 }
 
-func (this *PicoW) ListenToUart() {
-	buffer := make([]byte, 1024)
+// TODO: Use common lib
+func (this *PicoW) ReceiveFromUart() {
 	for {
-		n, err := this.uart.Read(buffer)
+		time.Sleep(1 * time.Second)
+		n, err := this.uart.Read(this.buffer)
 		if err != nil {
 			this.logger.Warn("Unexpected error while listening to UART", "error", err)
 			break
 		}
 
 		if n > 0 {
-			this.logger.Info("Message from STM32", "payload", string(buffer[:n]))
+			this.logger.Info("Message from STM32", "payload", string(this.buffer[:n]))
 		}
 	}
 
 	this.logger.Info("Stopping listening to UART")
+}
+
+// TODO: Use common lib
+func (this *PicoW) SentToUart(message string) {
+	for {
+		time.Sleep(2 * time.Second)
+		n, err := this.uart.Write([]byte(message))
+		if err != nil {
+			this.logger.Warn("Unexpected error while listening to UART", "error", err)
+			break
+		}
+
+		this.logger.Info("Sent to STM32", "byte count", n)
+	}
 }
 
 func (this *PicoW) Blink(times uint) {

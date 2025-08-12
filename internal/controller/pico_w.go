@@ -6,14 +6,19 @@ import (
 	"net"
 	"time"
 
+	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/component"
+)
+
+const (
+	maxRetries = 5
 )
 
 type Board interface {
 	Connect() error // Connects to Wi-Fi. Returns an error if connection process fails.
 	GetListener() (net.Listener, error)
 	ReceiveFromUart()
-	SentToUart(message string)
+	SentToUart(payload []byte)
 	Blink(times uint)
 	TurnLed(on bool)
 }
@@ -28,21 +33,20 @@ type PicoConfig struct {
 
 type PicoW struct {
 	wirelessChip *component.WirelessChip
-	uart         component.UART
 
-	logger *slog.Logger
+	logger        *slog.Logger
+	uartProcessor *network.UartProcessor
 
-	buffer []byte
 	config PicoConfig
 }
 
 func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
+	uart := component.NewConfiguredUart(machine.UART0, machine.GP3)
 	return &PicoW{
-		wirelessChip: component.NewWirelessChip(logger),
-		uart:         component.NewConfiguredUart(machine.UART0, machine.GP3),
-		logger:       logger,
-		buffer:       make([]byte, 1024),
-		config:       config,
+		wirelessChip:  component.NewWirelessChip(logger),
+		uartProcessor: network.NewUartProcessor(uart),
+		logger:        logger,
+		config:        config,
 	}
 }
 
@@ -58,35 +62,40 @@ func (this *PicoW) GetListener() (net.Listener, error) {
 	return this.wirelessChip.GetListener(this.config.Port)
 }
 
-// TODO: Use common lib
 func (this *PicoW) ReceiveFromUart() {
+	retries := 0
 	for {
 		time.Sleep(1 * time.Second)
-		n, err := this.uart.Read(this.buffer)
+		dType, content, err := this.uartProcessor.Read()
 		if err != nil {
 			this.logger.Warn("Unexpected error while listening to UART", "error", err)
-			break
+			if retries > maxRetries {
+				this.logger.Error("Max retries reached, stopping listening to UART")
+				break
+			}
+
+			retries++
+			continue
 		}
 
-		if n > 0 {
-			this.logger.Info("Message from STM32", "payload", string(this.buffer[:n]))
+		retries = 0
+		switch dType {
+		case network.UartEmpty:
+			this.logger.Debug("Received empty message", "content", content)
+		case network.UartMessage:
+			this.logger.Debug("Received message", "content", content)
+		case network.UartBytes:
+			this.logger.Debug("Received bytes", "content", content)
+		case network.UartPing:
+			this.uartProcessor.SendPong()
 		}
 	}
-
-	this.logger.Info("Stopping listening to UART")
 }
 
-// TODO: Use common lib
-func (this *PicoW) SentToUart(message string) {
-	for {
-		time.Sleep(2 * time.Second)
-		n, err := this.uart.Write([]byte(message))
-		if err != nil {
-			this.logger.Warn("Unexpected error while listening to UART", "error", err)
-			break
-		}
-
-		this.logger.Info("Sent to STM32", "byte count", n)
+func (this *PicoW) SentToUart(payload []byte) {
+	err := this.uartProcessor.WriteBytes(payload)
+	if err != nil {
+		this.logger.Error("Unexpected error when writing to UART", "error", err)
 	}
 }
 

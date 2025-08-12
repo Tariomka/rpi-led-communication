@@ -93,8 +93,7 @@ func (this *PicoW) ReceiveFromUart() {
 }
 
 func (this *PicoW) SentToUart(payload []byte) {
-	err := this.uartProcessor.WriteBytes(payload)
-	if err != nil {
+	if err := this.uartProcessor.WriteBytes(payload); err != nil {
 		this.logger.Error("Unexpected error when writing to UART", "error", err)
 	}
 }

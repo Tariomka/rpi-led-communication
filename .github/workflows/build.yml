@@ -1,0 +1,30 @@
+name: Master build
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Set up Tinygo
+      uses: acifani/setup-tinygo@v2
+      with:
+        tinygo-version: '0.38.0'
+
+    - name: Checks
+      run: |
+        go version
+        tinygo version
+
+    - name: Build
+      run: tinygo build -o build.uf2 -target=pico-w -size full ./main.go

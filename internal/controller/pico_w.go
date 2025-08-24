@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"machine"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/Tariomka/led-common-lib/pkg/network"
@@ -63,33 +64,10 @@ func (this *PicoW) GetListener() (net.Listener, error) {
 }
 
 func (this *PicoW) ReceiveFromUart() {
-	retries := 0
-	for {
-		time.Sleep(1 * time.Second)
-		dType, content, err := this.uartProcessor.Read()
-		if err != nil {
-			this.logger.Warn("Unexpected error while listening to UART", "error", err)
-			if retries > maxRetries {
-				this.logger.Error("Max retries reached, stopping listening to UART")
-				break
-			}
-
-			retries++
-			continue
-		}
-
-		retries = 0
-		switch dType {
-		case network.UartEmpty:
-			this.logger.Debug("Received empty message", "content", content)
-		case network.UartMessage:
-			this.logger.Debug("Received message", "content", content)
-		case network.UartBytes:
-			this.logger.Debug("Received bytes", "content", content)
-		case network.UartPing:
-			this.uartProcessor.SendPong()
-		}
-	}
+	// WORK IN PROGRESS
+	go this.debugPing()
+	// this.unprocessedReceiveFromUart()
+	this.processedReceiveFromUart()
 }
 
 func (this *PicoW) SentToUart(payload []byte) {
@@ -106,4 +84,67 @@ func (this *PicoW) Blink(times uint) {
 
 func (this *PicoW) TurnLed(on bool) {
 	this.wirelessChip.TurnLed(on)
+}
+
+// TODO: Remove later
+func (this *PicoW) processedReceiveFromUart() {
+	retries := 0
+	for {
+		time.Sleep(1 * time.Second)
+		dType, content, err := this.uartProcessor.Read()
+		if err != nil {
+			this.logger.Warn("Unexpected error while listening to UART", "error", err)
+			if retries > maxRetries {
+				this.logger.Error("Max retries reached, stopping listening to UART")
+				this.uartProcessor.Desynchronize()
+				break
+			}
+
+			retries++
+			continue
+		}
+
+		retries = 0
+		switch dType {
+		case network.UartEmpty:
+			this.logger.Debug("Received empty message", "content", content)
+		case network.UartMessage:
+			this.logger.Debug("Received message", "content", string(content))
+		case network.UartBytes:
+			this.logger.Debug("Received bytes", "content", content)
+		case network.UartPing:
+			this.uartProcessor.SendPong()
+		}
+	}
+}
+
+func (this *PicoW) unprocessedReceiveFromUart() {
+	for {
+		content, err := this.uartProcessor.ReadWithoutProcessing()
+		if err != nil {
+			this.logger.Warn("Unexpected error while listening to UART",
+				"error", err,
+				"content", string(content))
+			continue
+		}
+
+		if len(content) == 0 {
+			continue
+		}
+
+		this.logger.Debug("Received", "content", content, "content as string", string(content))
+		if strings.Contains(string(content), "SGFuZHNoYWtl") {
+			this.uartProcessor.Synchronize()
+			return
+		}
+	}
+}
+
+func (this *PicoW) debugPing() {
+	for {
+		select {
+		case <-time.After(5 * time.Second):
+			this.uartProcessor.WriteMessage("Hello from RPi!")
+		}
+	}
 }

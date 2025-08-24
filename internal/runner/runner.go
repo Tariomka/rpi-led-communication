@@ -42,7 +42,7 @@ func (this *PicoRunner) Start() {
 	}
 
 	this.PicoW.TurnLed(true)
-	go this.PicoW.ReceiveFromUart()
+	go this.receiveUartMessages()
 	this.Server.Start()
 }
 
@@ -66,4 +66,10 @@ func (this *PicoRunner) connectAndListen() error {
 	this.PicoW.Blink(1)
 	this.Server, err = tcp.NewServer(listener, this.Logger)
 	return err
+}
+
+func (this *PicoRunner) receiveUartMessages() {
+	for {
+		this.PicoW.ReceiveFromUart()
+	}
 }

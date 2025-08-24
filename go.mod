@@ -11,6 +11,6 @@ require (
 )
 
 require (
-	github.com/Tariomka/led-common-lib v0.4.1
+	github.com/Tariomka/led-common-lib v0.4.3
 	golang.org/x/exp v0.0.0-20250808145144-a408d31f581a // indirect
 )

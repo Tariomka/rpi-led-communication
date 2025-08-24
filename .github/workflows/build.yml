@@ -11,6 +11,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - run: touch ./internal/runner/config.json
+
     - name: Set up Go
       uses: actions/setup-go@v4
       with:

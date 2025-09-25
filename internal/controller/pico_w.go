@@ -2,251 +2,149 @@ package controller
 
 import (
 	"log/slog"
+	"machine"
 	"net"
-	"net/netip"
 	"strings"
 	"time"
 
-	"github.com/Tariomka/rpi-led-communication/internal/common"
-	"github.com/soypat/cyw43439"
-	"github.com/soypat/seqs/eth/dhcp"
-	"github.com/soypat/seqs/stacks"
+	"github.com/Tariomka/led-common-lib/pkg/network"
+	"github.com/Tariomka/rpi-led-communication/internal/component"
 )
 
 const (
 	maxRetries = 5
-	queueSize  = 3
 )
 
 type Board interface {
-	Connect(ssid, pass, staticIp string) error // Connects to Wi-Fi. Returns an error if connection process fails.
-	DHCPRequest(staticIp string) error
-	GetListener(listenPort uint16) (net.Listener, error)
+	Connect() error // Connects to Wi-Fi. Returns an error if connection process fails.
+	GetListener() (net.Listener, error)
+	ReceiveFromUart()
+	SentToUart(payload []byte)
+	Blink(times uint)
+	TurnLed(on bool)
+}
+
+type PicoConfig struct {
+	SSID     string
+	Password string
+	IP       string
+	Port     uint16
+	Hostname string
 }
 
 type PicoW struct {
-	WirelessChip *cyw43439.Device // (CYW43439) WiFi + Bluetooth
-	stack        *stacks.PortStack
-	dhcp         *dhcp.ClientState
+	wirelessChip *component.WirelessChip
 
-	logger   *slog.Logger
-	hostname string
+	logger        *slog.Logger
+	uartProcessor *network.UartProcessor
+
+	config PicoConfig
 }
 
-func NewPicoW(hostname string, logger *slog.Logger) Board {
-	if logger == nil {
-		logger = common.NewNoopLogger()
+func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
+	uart := component.NewConfiguredUart(machine.UART0, machine.GP3)
+	return &PicoW{
+		wirelessChip:  component.NewWirelessChip(logger),
+		uartProcessor: network.NewUartProcessor(uart),
+		logger:        logger,
+		config:        config,
 	}
-	if strings.TrimSpace(hostname) == "" {
-		hostname = "PicoW"
-	}
-
-	board := PicoW{
-		WirelessChip: cyw43439.NewPicoWDevice(),
-		logger:       logger, // set logger to Wifi sender later, to send info to PC/phone
-		hostname:     hostname,
-	}
-
-	config := cyw43439.DefaultWifiBluetoothConfig()
-	config.Logger = common.NewNoopLogger()
-	// config.Logger = common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn)
-	if err := board.WirelessChip.Init(config); err != nil {
-		panic("Failed to initialize Pico W wireless interface: " + err.Error())
-	}
-
-	return &board
 }
 
-func (pw *PicoW) Connect(ssid, pass, staticIp string) error {
-	var err error
-	var requestedAddress netip.Addr
-
-	for i := 0; i < maxRetries; i++ {
-		err = pw.WirelessChip.JoinWPA2(ssid, pass)
-		if err == nil {
-			break
-		}
-		pw.logger.Error("wifi join failed", "err", err.Error())
-		time.Sleep(5 * time.Second)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	mac, err := pw.WirelessChip.HardwareAddr6()
-	if err != nil {
-		return err
-	}
-
-	pw.stack = stacks.NewPortStack(stacks.PortStackConfig{
-		MAC:             mac,
-		MaxOpenPortsUDP: 1,
-		MaxOpenPortsTCP: 1,
-		MTU:             cyw43439.MTU,
-		Logger:          common.NewNoopLogger(),
-		// Logger: common.NewStructuredLogger(machine.USBCDC, slog.LevelWarn),
-	})
-	pw.WirelessChip.RecvEthHandle(pw.stack.RecvEth)
-	go pw.handlePackets()
-
-	if strings.TrimSpace(staticIp) == "" {
-		return nil
-	}
-
-	requestedAddress, err = netip.ParseAddr(staticIp)
-	if err != nil {
-		return err
-	}
-
-	pw.stack.SetAddr(requestedAddress)
-	return nil
+func (this *PicoW) Connect() error {
+	return this.wirelessChip.Connect(
+		this.config.SSID,
+		this.config.Password,
+		this.config.IP,
+		this.config.Hostname)
 }
 
-func (pw *PicoW) DHCPRequest(staticIp string) error {
-	var err error
-	var requestedAddress netip.Addr
-
-	if strings.TrimSpace(staticIp) != "" {
-		requestedAddress, err = netip.ParseAddr(staticIp)
-		if err != nil {
-			return err
-		}
-	}
-
-	dhcpClient := stacks.NewDHCPClient(pw.stack, dhcp.DefaultClientPort)
-	dhcpConfig := stacks.DHCPRequestConfig{
-		RequestedAddr: requestedAddress,
-		Xid:           uint32(time.Now().Nanosecond()),
-		Hostname:      pw.hostname,
-	}
-	if err = dhcpClient.BeginRequest(dhcpConfig); err != nil {
-		return err
-	}
-
-	for i := 0; i < maxRetries && dhcpClient.State() != dhcp.StateBound; i++ {
-		time.Sleep(time.Second / 2)
-		if i > 15 {
-			if !requestedAddress.IsValid() {
-				pw.logger.Error("DHCP did not complete and no static IP was requested")
-				return common.ErrDhcpRequestFailed
-			}
-
-			pw.logger.Warn("DHCP did not complete, falling back to static IP")
-			pw.stack.SetAddr(requestedAddress)
-			return nil
-		}
-	}
-	var primaryDNS netip.Addr
-	dnsServers := dhcpClient.DNSServers()
-	if len(dnsServers) > 0 {
-		primaryDNS = dnsServers[0]
-	}
-	ip := dhcpClient.Offer()
-	pw.logger.Info(
-		"DHCP complete",
-		slog.Uint64("cidrbits", uint64(dhcpClient.CIDRBits())),
-		slog.String("ourIP", ip.String()),
-		slog.String("dns", primaryDNS.String()),
-		slog.String("broadcast", dhcpClient.BroadcastAddr().String()),
-		slog.String("gateway", dhcpClient.Gateway().String()),
-		slog.String("router", dhcpClient.Router().String()),
-		slog.String("dhcp", dhcpClient.DHCPServer().String()),
-		slog.String("hostname", string(dhcpClient.Hostname())),
-		slog.Duration("lease", dhcpClient.IPLeaseTime()),
-		slog.Duration("renewal", dhcpClient.RenewalTime()),
-		slog.Duration("rebinding", dhcpClient.RebindingTime()),
-	)
-
-	pw.stack.SetAddr(ip) // It's important to set the IP address after DHCP completes.
-	return nil
+func (this *PicoW) GetListener() (net.Listener, error) {
+	return this.wirelessChip.GetListener(this.config.Port)
 }
 
-func (pw *PicoW) GetListener(listenPort uint16) (net.Listener, error) {
-	tcpbufsize := uint16(512) // MTU - ethhdr - iphdr - tcphdr
-
-	if pw.stack == nil {
-		return nil, common.ErrNoInternetConnection
-	}
-
-	listener, err := stacks.NewTCPListener(pw.stack, stacks.TCPListenerConfig{
-		MaxConnections: 3,
-		ConnTxBufSize:  tcpbufsize,
-		ConnRxBufSize:  tcpbufsize,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = listener.StartListening(listenPort)
-	if err != nil {
-		return nil, err
-	}
-
-	return listener, nil
+func (this *PicoW) ReceiveFromUart() {
+	// WORK IN PROGRESS
+	go this.debugPing()
+	// this.unprocessedReceiveFromUart()
+	this.processedReceiveFromUart()
 }
 
-func (pw *PicoW) handlePackets() {
-	var queue [queueSize][cyw43439.MTU]byte
-	var lenBuf [queueSize]int
-	var retries [queueSize]int
-	markSent := func(i int) {
-		queue[i] = [cyw43439.MTU]byte{} // Not really necessary.
-		lenBuf[i] = 0
-		retries[i] = 0
+func (this *PicoW) SentToUart(payload []byte) {
+	if err := this.uartProcessor.WriteBytes(payload); err != nil {
+		this.logger.Error("Unexpected error when writing to UART", "error", err)
 	}
+}
+
+func (this *PicoW) Blink(times uint) {
+	for range times {
+		this.wirelessChip.Blink()
+	}
+}
+
+func (this *PicoW) TurnLed(on bool) {
+	this.wirelessChip.TurnLed(on)
+}
+
+// TODO: Remove later
+func (this *PicoW) processedReceiveFromUart() {
+	retries := 0
 	for {
-		stallRx := true
-		// Poll for incoming packets.
-		for i := 0; i < 1; i++ {
-			gotPacket, _ := pw.WirelessChip.PollOne()
-			if !gotPacket {
+		time.Sleep(1 * time.Second)
+		dType, content, err := this.uartProcessor.Read()
+		if err != nil {
+			this.logger.Warn("Unexpected error while listening to UART", "error", err)
+			if retries > maxRetries {
+				this.logger.Error("Max retries reached, stopping listening to UART")
+				this.uartProcessor.Desynchronize()
 				break
 			}
-			stallRx = false
-		}
 
-		// Queue packets to be sent.
-		for i := range queue {
-			if retries[i] != 0 {
-				continue // Packet currently queued for retransmission.
-			}
-			var err error
-			buf := queue[i][:]
-			lenBuf[i], err = pw.stack.HandleEth(buf[:])
-			if err != nil {
-				lenBuf[i] = 0
-				continue
-			}
-			if lenBuf[i] == 0 {
-				break
-			}
-		}
-		stallTx := lenBuf == [queueSize]int{}
-		if stallTx {
-			if stallRx {
-				// Avoid busy waiting when both Rx and Tx stall.
-				time.Sleep(51 * time.Millisecond)
-			}
+			retries++
 			continue
 		}
 
-		// Send queued packets.
-		for i := range queue {
-			n := lenBuf[i]
-			if n <= 0 {
-				continue
-			}
-			err := pw.WirelessChip.SendEth(queue[i][:n])
-			if err != nil {
-				// Queue packet for retransmission.
-				retries[i]++
-				if retries[i] > maxRetries {
-					markSent(i)
-				}
-			} else {
-				markSent(i)
-			}
+		retries = 0
+		switch dType {
+		case network.UartEmpty:
+			this.logger.Debug("Received empty message", "content", content)
+		case network.UartMessage:
+			this.logger.Debug("Received message", "content", string(content))
+		case network.UartBytes:
+			this.logger.Debug("Received bytes", "content", content)
+		case network.UartPing:
+			this.uartProcessor.SendPong()
+		}
+	}
+}
+
+func (this *PicoW) unprocessedReceiveFromUart() {
+	for {
+		content, err := this.uartProcessor.ReadWithoutProcessing()
+		if err != nil {
+			this.logger.Warn("Unexpected error while listening to UART",
+				"error", err,
+				"content", string(content))
+			continue
+		}
+
+		if len(content) == 0 {
+			continue
+		}
+
+		this.logger.Debug("Received", "content", content, "content as string", string(content))
+		if strings.Contains(string(content), "SGFuZHNoYWtl") {
+			this.uartProcessor.Synchronize()
+			return
+		}
+	}
+}
+
+func (this *PicoW) debugPing() {
+	for {
+		select {
+		case <-time.After(5 * time.Second):
+			this.uartProcessor.WriteMessage("Hello from RPi!")
 		}
 	}
 }

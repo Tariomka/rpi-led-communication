@@ -3,13 +3,16 @@ BIN_NAME = rpi_led_com
 ifdef OS
 	VERSION = v$(strip $(shell cmd /C date /t))_$(subst :,-,$(shell cmd /C time /t))
 	RM = del /s /q
+	TOUCH = type nul >>
 else
 	VERSION = $(shell date '+%Y_%m_%d_%H-%M')
 	RM = rm -rf
+	TOUCH = touch
 endif
 
-flash:
+flash: add_config
 	@echo Starting to flash Tinygo binary to Raspberry PI Pico, please wait...
+	@echo If prompted please remount Raspberry PI Pico
 	@tinygo flash -target=pico-w -size full ./main.go
 	@echo Flashing finished.
 	@echo Starting monitoring:
@@ -18,12 +21,12 @@ flash:
 monitor:
 	@tinygo monitor
 
-build: create
+build: create add_config
 	@echo Starting to compile Tinygo binary, please wait...
 	@tinygo build -o ./$(BIN_DIR)/$(BIN_NAME).uf2 -target=pico-w ./main.go
 	@echo Build finished.
 
-build_version: create
+build_version: create add_config
 	@echo Starting to compile versioned Tinygo binary, please wait...
 	@tinygo build -o ./$(BIN_DIR)/$(BIN_NAME)_$(VERSION).uf2 -target=pico-w -size full ./main.go
 	@echo Created '$(BIN_NAME)_$(VERSION).uf2' binary file.
@@ -34,3 +37,6 @@ create:
 
 clean:
 	@$(RM) $(BIN_DIR)
+
+add_config:
+	@$(TOUCH) ./internal/runner/config.json

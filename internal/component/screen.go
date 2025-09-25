@@ -8,21 +8,17 @@ import (
 	"tinygo.org/x/drivers/xpt2046"
 )
 
-type Screen interface {
-	Draw()
-}
-
-type ILI9341 struct {
+type Display struct {
 	screen *ili9341.Device
-	touch  xpt2046.Device
+	touch  *xpt2046.Device
 
-	power     OutputPin
 	backlight OutputPin
 }
 
-// GP10 -> SCK
-// GP11 -> SDI
-// GP12 -> SD0
+// LCD Screen wiring (ILI9341)
+// --------------------------
+// GP10 -> SCL
+// GP11 -> SDA
 
 // GP6 -> RES (RESX)
 // GP7 -> D/C (WRX)
@@ -32,27 +28,42 @@ type ILI9341 struct {
 // GP14 -> VCC
 // GP15 -> BL (probably BackLight)
 
-func NewScreen() Screen {
-	power := NewOutputPin(machine.GP14)
-	power.High()
+// FM = RDX
+// --------------------------
+
+// Touch Screen wiring (XPT2046)
+// --------------------------
+// GP18 -> DCLK (T_SCK)
+// GP17 -> CS (T_CS)
+// GP19 -> DIN (T_MOSI)
+// GP16 -> DOUT (T_MISO)
+// GP20 -> IRQ (T_PENIRQ)
+// Groud -> GND
+// --------------------------
+
+func NewDisplay() *Display {
+	NewOutputPin(machine.GP14).High() // Main Power
 	backlight := NewOutputPin(machine.GP15)
 	backlight.High()
 
-	spi := NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
-	screen := NewLCDScreen(spi, machine.GP6, machine.GP7, machine.GP8)
-	touch := xpt2046.Device{}
-
-	return &ILI9341{
-		screen:    screen,
-		touch:     touch,
-		power:     power,
+	return &Display{
+		screen: NewLCDScreen(
+			NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN),
+			machine.GP6,
+			machine.GP7,
+			machine.GP8),
+		touch: NewTouchScreen(
+			machine.GP18,
+			machine.GP17,
+			machine.GP19,
+			machine.GP16,
+			machine.GP20),
 		backlight: backlight,
 	}
 }
 
-func (this *ILI9341) Draw() {
-	println("Drawing on screen...")
-	if err := this.screen.FillRectangle(10, 10, 100, 100, color.RGBA{R: 255, A: 255}); err != nil {
-		println("Error filling rectangle: ", err.Error())
-	}
+// Placeholder
+func (this *Display) Draw() error {
+	this.screen.Display()
+	return this.screen.FillRectangle(10, 10, 100, 100, color.RGBA{R: 255, A: 255})
 }

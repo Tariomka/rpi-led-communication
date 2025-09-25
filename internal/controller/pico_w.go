@@ -36,7 +36,7 @@ type PicoConfig struct {
 
 type PicoW struct {
 	wirelessChip *component.WirelessChip
-	screen       component.Screen
+	display      *component.Display
 
 	logger        *slog.Logger
 	uartProcessor *network.UartProcessor
@@ -47,8 +47,8 @@ type PicoW struct {
 func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
 	uart := component.NewConfiguredUart(machine.UART0, machine.GP2)
 	return &PicoW{
-		wirelessChip:  component.NewWirelessChip(logger),
-		screen:        component.NewScreen(),
+		wirelessChip: component.NewWirelessChip(logger),
+		// display:        component.NewDisplay(),
 		uartProcessor: network.NewUartProcessor(uart),
 		logger:        logger,
 		config:        config,
@@ -154,7 +154,13 @@ func (this *PicoW) debugPing() {
 }
 
 func (this *PicoW) Screen() {
+	if this.display == nil {
+		this.logger.Debug("Initializing screen...")
+		this.display = component.NewDisplay()
+	}
+
 	for {
-		this.screen.Draw()
+		this.logger.Debug("Drawing on screen...")
+		this.display.Draw()
 	}
 }

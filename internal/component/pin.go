@@ -49,13 +49,14 @@ func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
 
 func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
 	device := ili9341.NewSPI(spi, dc, cs, reset)
-	device.Configure(ili9341.Config{})
+	device.Configure(ili9341.Config{DisplayInversion: true})
 
 	return device
 }
 
-func NewTouchScreen() xpt2046.Device {
-	touch := xpt2046.Device{}
+func NewTouchScreen(clk, cs, din, dout, irq machine.Pin) *xpt2046.Device {
+	device := xpt2046.New(clk, cs, din, dout, irq)
+	device.Configure(&xpt2046.Config{Precision: 12})
 
-	return touch
+	return &device
 }

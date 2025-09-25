@@ -22,6 +22,8 @@ type Board interface {
 	SentToUart(payload []byte)
 	Blink(times uint)
 	TurnLed(on bool)
+
+	Screen()
 }
 
 type PicoConfig struct {
@@ -34,6 +36,7 @@ type PicoConfig struct {
 
 type PicoW struct {
 	wirelessChip *component.WirelessChip
+	screen       component.Screen
 
 	logger        *slog.Logger
 	uartProcessor *network.UartProcessor
@@ -42,9 +45,10 @@ type PicoW struct {
 }
 
 func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
-	uart := component.NewConfiguredUart(machine.UART0, machine.GP3)
+	uart := component.NewConfiguredUart(machine.UART0, machine.GP2)
 	return &PicoW{
 		wirelessChip:  component.NewWirelessChip(logger),
+		screen:        component.NewScreen(),
 		uartProcessor: network.NewUartProcessor(uart),
 		logger:        logger,
 		config:        config,
@@ -146,5 +150,11 @@ func (this *PicoW) debugPing() {
 		case <-time.After(5 * time.Second):
 			this.uartProcessor.WriteMessage("Hello from RPi!")
 		}
+	}
+}
+
+func (this *PicoW) Screen() {
+	for {
+		this.screen.Draw()
 	}
 }

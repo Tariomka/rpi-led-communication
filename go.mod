@@ -11,6 +11,8 @@ require (
 )
 
 require (
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/tinygo-org/pio v0.2.0 // indirect
 	golang.org/x/exp v0.0.0-20250808145144-a408d31f581a // indirect
+	tinygo.org/x/drivers v0.33.0 // indirect
 )

@@ -32,6 +32,7 @@ func NewRunner(config RunnerConfig) Runner {
 }
 
 func (this *PicoRunner) Start() {
+	println("Starting runner...")
 	if err := this.connectAndListen(); err != nil {
 		panic(err.Error())
 	}
@@ -42,7 +43,9 @@ func (this *PicoRunner) Start() {
 	}
 
 	this.PicoW.TurnLed(true)
+	println("Server started, waiting for connections...")
 	go this.receiveUartMessages()
+	go this.PicoW.Screen()
 	this.Server.Start()
 }
 

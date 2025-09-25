@@ -1,6 +1,11 @@
 package component
 
-import "machine"
+import (
+	"machine"
+
+	"tinygo.org/x/drivers/ili9341"
+	"tinygo.org/x/drivers/xpt2046"
+)
 
 // Pin that's setup for Input mode
 type InputPin struct{ machine.Pin }
@@ -20,6 +25,17 @@ func NewOutputPin(pin machine.Pin) OutputPin {
 	return output
 }
 
+func NewSpiOutput(spi *machine.SPI, sck, sdo machine.Pin) *machine.SPI {
+	spi.Configure(machine.SPIConfig{
+		Frequency: 40 * machine.MHz,
+		SCK:       sck,
+		SDO:       sdo,
+		Mode:      3,
+	})
+
+	return spi
+}
+
 type UART struct{ *machine.UART }
 
 func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
@@ -29,4 +45,17 @@ func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
 	NewOutputPin(powerPin).High()
 
 	return device
+}
+
+func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
+	device := ili9341.NewSPI(spi, dc, cs, reset)
+	device.Configure(ili9341.Config{})
+
+	return device
+}
+
+func NewTouchScreen() xpt2046.Device {
+	touch := xpt2046.Device{}
+
+	return touch
 }

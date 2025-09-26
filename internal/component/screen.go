@@ -1,7 +1,10 @@
 package component
 
 import (
+	"fmt"
 	"machine"
+	"strings"
+	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"tinygo.org/x/drivers/ili9341"
@@ -85,6 +88,36 @@ func (this *Display) Draw() {
 
 	this.screen.Println("Hello from TinyTerm!")
 	this.screen.Display()
+}
+
+func (this *Display) Draw2() {
+	for n := 0; ; n++ {
+		this.screen.Write([]byte("   " + strings.Repeat("_", 36) + "\n"))
+		fmt.Fprintf(this.screen, "%02x|", 0)
+		for n := 0; n < 16; n++ {
+			fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", n)
+		}
+		this.screen.Write([]byte(strings.Repeat(" ", 20) + "|\n"))
+		for n := 0; n < 6; n++ {
+			i := n*36 + 16
+			fmt.Fprintf(this.screen, "%02x|", i)
+			for j := 0; j < 36; j++ {
+				v := i + j
+				fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", v)
+			}
+			this.screen.WriteByte('|')
+			this.screen.WriteByte('\n')
+		}
+		fmt.Fprintf(this.screen, "%02x|", 232)
+		for n := 232; n <= 255; n++ {
+			fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", n)
+		}
+		this.screen.Write([]byte(strings.Repeat(" ", 12) + "|\n"))
+		this.screen.Write([]byte("   " + strings.Repeat("\xaf", 36) + "\n"))
+
+		this.screen.Display()
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (this *Display) ReadTouch() touch.Point {

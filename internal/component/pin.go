@@ -27,10 +27,11 @@ func NewOutputPin(pin machine.Pin) OutputPin {
 
 func NewSpiOutput(spi *machine.SPI, sck, sdo machine.Pin) *machine.SPI {
 	spi.Configure(machine.SPIConfig{
-		Frequency: 20 * machine.MHz,
+		Frequency: 40 * machine.MHz,
 		SCK:       sck,
 		SDO:       sdo,
-		Mode:      3,
+		SDI:       machine.SPI1_SDI_PIN,
+		Mode:      0b10,
 	})
 
 	return spi
@@ -48,11 +49,9 @@ func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
 }
 
 func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
-	println("Starting LCD screen...")
 	device := ili9341.NewSPI(spi, dc, cs, reset)
-	println("Configuring LCD screen...")
 	device.Configure(ili9341.Config{
-		Rotation:         ili9341.Rotation90,
+		Rotation:         ili9341.Rotation270,
 		DisplayInversion: false,
 	})
 

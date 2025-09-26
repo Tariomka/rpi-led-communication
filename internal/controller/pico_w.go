@@ -160,23 +160,22 @@ func (this *PicoW) StartScreen() {
 	}
 
 	go this.screen()
-	go this.touch()
+	// go this.touch()
 }
 
 func (this *PicoW) screen() {
 	this.logger.Debug("Drawing on screen...")
-	for {
-		this.display.Draw()
-	}
+	this.display.Draw()
 }
 
 func (this *PicoW) touch() {
 	this.logger.Debug("Listening to touch...")
 	for {
+		this.logger.Debug("Reading touch...")
 		point := this.display.ReadTouch()
 		if point.X != 0 || point.Y != 0 {
 			this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(500 * time.Millisecond)
 	}
 }

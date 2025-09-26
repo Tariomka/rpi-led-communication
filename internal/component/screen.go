@@ -4,6 +4,7 @@ import (
 	"machine"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"tinygo.org/x/drivers/ili9341"
 	"tinygo.org/x/drivers/touch"
 	"tinygo.org/x/drivers/xpt2046"
 	"tinygo.org/x/tinyfont/proggy"
@@ -11,6 +12,7 @@ import (
 )
 
 type Display struct {
+	lcd    *ili9341.Device
 	screen *tinyterm.Terminal
 	touch  *xpt2046.Device
 
@@ -19,7 +21,7 @@ type Display struct {
 
 // LCD Screen wiring (ILI9341)
 // --------------------------
-// GP10 -> SCL
+// GP10 -> SCL (D/CX)
 // GP11 -> SDA
 // GP12 -> SDO (Unused)
 
@@ -48,26 +50,24 @@ func NewDisplay() *Display {
 	backlight := NewOutputPin(machine.GP15)
 	backlight.High()
 
-	println("Initializing SPI...")
 	spi := NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
-	println("Initializing display...")
 	screen := NewLCDScreen(
 		spi,
 		machine.GP6,
 		machine.GP7,
 		machine.GP8)
-	println("Covering in red...")
 	screen.FillScreen(common.ColorRed)
 
 	terminal := tinyterm.NewTerminal(screen)
 	terminal.Configure(&tinyterm.Config{
 		Font:              &proggy.TinySZ8pt7b,
-		FontHeight:        8,
+		FontHeight:        14,
 		FontOffset:        6,
-		UseSoftwareScroll: true,
+		UseSoftwareScroll: false,
 	})
 
 	return &Display{
+		lcd:    screen,
 		screen: terminal,
 		touch: NewTouchScreen(
 			machine.GP18,
@@ -81,8 +81,9 @@ func NewDisplay() *Display {
 
 // Placeholder
 func (this *Display) Draw() {
+	this.lcd.FillScreen(common.ColorBlack)
+
 	this.screen.Println("Hello from TinyTerm!")
-	// return this.screen.FillRectangle(10, 10, 100, 100, color.RGBA{R: 255, A: 255})
 	this.screen.Display()
 }
 

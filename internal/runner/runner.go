@@ -43,7 +43,7 @@ func (this *PicoRunner) Start() {
 
 	this.PicoW.TurnLed(true)
 	// go this.receiveUartMessages()
-	go this.PicoW.Screen()
+	this.PicoW.StartScreen()
 	this.Server.Start()
 }
 

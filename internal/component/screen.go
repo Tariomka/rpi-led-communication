@@ -1,15 +1,17 @@
 package component
 
 import (
-	"image/color"
 	"machine"
 
-	"tinygo.org/x/drivers/ili9341"
+	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"tinygo.org/x/drivers/touch"
 	"tinygo.org/x/drivers/xpt2046"
+	"tinygo.org/x/tinyfont/proggy"
+	"tinygo.org/x/tinyterm"
 )
 
 type Display struct {
-	screen *ili9341.Device
+	screen *tinyterm.Terminal
 	touch  *xpt2046.Device
 
 	backlight OutputPin
@@ -19,16 +21,16 @@ type Display struct {
 // --------------------------
 // GP10 -> SCL
 // GP11 -> SDA
+// GP12 -> SDO (Unused)
 
 // GP6 -> RES (RESX)
 // GP7 -> D/C (WRX)
 // GP8 -> CS (CSX)
+// GP9 -> FM = RDX (Unused)
 
 // Groud -> GND
 // GP14 -> VCC
-// GP15 -> BL (probably BackLight)
-
-// FM = RDX
+// GP15 -> BL
 // --------------------------
 
 // Touch Screen wiring (XPT2046)
@@ -46,12 +48,27 @@ func NewDisplay() *Display {
 	backlight := NewOutputPin(machine.GP15)
 	backlight.High()
 
+	println("Initializing SPI...")
+	spi := NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
+	println("Initializing display...")
+	screen := NewLCDScreen(
+		spi,
+		machine.GP6,
+		machine.GP7,
+		machine.GP8)
+	println("Covering in red...")
+	screen.FillScreen(common.ColorRed)
+
+	terminal := tinyterm.NewTerminal(screen)
+	terminal.Configure(&tinyterm.Config{
+		Font:              &proggy.TinySZ8pt7b,
+		FontHeight:        8,
+		FontOffset:        6,
+		UseSoftwareScroll: true,
+	})
+
 	return &Display{
-		screen: NewLCDScreen(
-			NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN),
-			machine.GP6,
-			machine.GP7,
-			machine.GP8),
+		screen: terminal,
 		touch: NewTouchScreen(
 			machine.GP18,
 			machine.GP17,
@@ -63,7 +80,16 @@ func NewDisplay() *Display {
 }
 
 // Placeholder
-func (this *Display) Draw() error {
+func (this *Display) Draw() {
+	this.screen.Println("Hello from TinyTerm!")
+	// return this.screen.FillRectangle(10, 10, 100, 100, color.RGBA{R: 255, A: 255})
 	this.screen.Display()
-	return this.screen.FillRectangle(10, 10, 100, 100, color.RGBA{R: 255, A: 255})
+}
+
+func (this *Display) ReadTouch() touch.Point {
+	if this.touch.Touched() {
+		return this.touch.ReadTouchPoint()
+	}
+
+	return touch.Point{}
 }

@@ -23,7 +23,7 @@ type Board interface {
 	Blink(times uint)
 	TurnLed(on bool)
 
-	Screen()
+	StartScreen()
 }
 
 type PicoConfig struct {
@@ -153,14 +153,30 @@ func (this *PicoW) debugPing() {
 	}
 }
 
-func (this *PicoW) Screen() {
+func (this *PicoW) StartScreen() {
 	if this.display == nil {
 		this.logger.Debug("Initializing screen...")
 		this.display = component.NewDisplay()
 	}
 
+	go this.screen()
+	go this.touch()
+}
+
+func (this *PicoW) screen() {
+	this.logger.Debug("Drawing on screen...")
 	for {
-		this.logger.Debug("Drawing on screen...")
 		this.display.Draw()
+	}
+}
+
+func (this *PicoW) touch() {
+	this.logger.Debug("Listening to touch...")
+	for {
+		point := this.display.ReadTouch()
+		if point.X != 0 || point.Y != 0 {
+			this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

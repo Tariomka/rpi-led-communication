@@ -1,23 +1,26 @@
 package component
 
 import (
-	"fmt"
 	"machine"
-	"strings"
-	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"tinygo.org/x/drivers/ili9341"
+	"tinygo.org/x/drivers/pixel"
 	"tinygo.org/x/drivers/touch"
 	"tinygo.org/x/drivers/xpt2046"
+	"tinygo.org/x/tinyfont"
 	"tinygo.org/x/tinyfont/proggy"
-	"tinygo.org/x/tinyterm"
+)
+
+const (
+	verticalOffset   = 0
+	horizontalOffset = 0
+	// horizontalOffset = 42
 )
 
 type Display struct {
-	lcd    *ili9341.Device
-	screen *tinyterm.Terminal
-	touch  *xpt2046.Device
+	lcd   *ili9341.Device
+	touch *xpt2046.Device
 
 	backlight OutputPin
 }
@@ -61,17 +64,8 @@ func NewDisplay() *Display {
 		machine.GP8)
 	screen.FillScreen(common.ColorRed)
 
-	terminal := tinyterm.NewTerminal(screen)
-	terminal.Configure(&tinyterm.Config{
-		Font:              &proggy.TinySZ8pt7b,
-		FontHeight:        14,
-		FontOffset:        6,
-		UseSoftwareScroll: false,
-	})
-
 	return &Display{
-		lcd:    screen,
-		screen: terminal,
+		lcd: screen,
 		touch: NewTouchScreen(
 			machine.GP18,
 			machine.GP17,
@@ -83,41 +77,36 @@ func NewDisplay() *Display {
 }
 
 // Placeholder
-func (this *Display) Draw() {
+func (this *Display) DrawBackground() {
 	this.lcd.FillScreen(common.ColorBlack)
-
-	this.screen.Println("Hello from TinyTerm!")
-	this.screen.Display()
 }
 
-func (this *Display) Draw2() {
-	for n := 0; ; n++ {
-		this.screen.Write([]byte("   " + strings.Repeat("_", 36) + "\n"))
-		fmt.Fprintf(this.screen, "%02x|", 0)
-		for n := 0; n < 16; n++ {
-			fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", n)
-		}
-		this.screen.Write([]byte(strings.Repeat(" ", 20) + "|\n"))
-		for n := 0; n < 6; n++ {
-			i := n*36 + 16
-			fmt.Fprintf(this.screen, "%02x|", i)
-			for j := 0; j < 36; j++ {
-				v := i + j
-				fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", v)
-			}
-			this.screen.WriteByte('|')
-			this.screen.WriteByte('\n')
-		}
-		fmt.Fprintf(this.screen, "%02x|", 232)
-		for n := 232; n <= 255; n++ {
-			fmt.Fprintf(this.screen, "\x1b[48;5;%dm \x1b[0m", n)
-		}
-		this.screen.Write([]byte(strings.Repeat(" ", 12) + "|\n"))
-		this.screen.Write([]byte("   " + strings.Repeat("\xaf", 36) + "\n"))
+func (this *Display) DrawText() {
+	text := "Kas Skatys, Tas Gaidys!"
 
-		this.screen.Display()
-		time.Sleep(5 * time.Second)
-	}
+	// tinyfont.WriteLine(this.lcd, &proggy.TinySZ8pt7b, horizontalOffset, 70, text, common.ColorGreen)
+	tinyfont.WriteLineRotated(
+		this.lcd,
+		&proggy.TinySZ8pt7b,
+		horizontalOffset+10,
+		50,
+		text,
+		common.ColorMagenta,
+		tinyfont.ROTATION_90)
+
+	tinyfont.WriteLineRotated(
+		this.lcd,
+		&proggy.TinySZ8pt7b,
+		horizontalOffset+310,
+		190,
+		text,
+		common.ColorRed,
+		tinyfont.ROTATION_270)
+}
+
+func (this *Display) DrawImage() {
+	image := pixel.NewImageFromBytes[pixel.RGB565BE](240, 240, embededImage)
+	this.lcd.DrawBitmap(horizontalOffset+40, verticalOffset, image)
 }
 
 func (this *Display) ReadTouch() touch.Point {

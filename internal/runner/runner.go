@@ -16,7 +16,7 @@ type Runner interface {
 }
 
 type PicoRunner struct {
-	PicoW        controller.Board
+	PicoW        *controller.PicoW
 	LayoutWorker led.LayoutWorker
 	Server       tcp.Server
 	Logger       *slog.Logger

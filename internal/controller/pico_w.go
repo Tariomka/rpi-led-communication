@@ -15,16 +15,16 @@ const (
 	maxRetries = 5
 )
 
-type Board interface {
-	Connect() error // Connects to Wi-Fi. Returns an error if connection process fails.
-	GetListener() (net.Listener, error)
-	ReceiveFromUart()
-	SentToUart(payload []byte)
-	Blink(times uint)
-	TurnLed(on bool)
+// type Board interface {
+// 	Connect() error // Connects to Wi-Fi. Returns an error if connection process fails.
+// 	GetListener() (net.Listener, error)
+// 	ReceiveFromUart()
+// 	SentToUart(payload []byte)
+// 	Blink(times uint)
+// 	TurnLed(on bool)
 
-	StartScreen()
-}
+// 	StartScreen()
+// }
 
 type PicoConfig struct {
 	SSID     string
@@ -44,7 +44,7 @@ type PicoW struct {
 	config PicoConfig
 }
 
-func NewPicoW(config PicoConfig, logger *slog.Logger) Board {
+func NewPicoW(config PicoConfig, logger *slog.Logger) *PicoW {
 	uart := component.NewConfiguredUart(machine.UART0, machine.GP2)
 	return &PicoW{
 		wirelessChip: component.NewWirelessChip(logger),
@@ -119,6 +119,7 @@ func (this *PicoW) processedReceiveFromUart() {
 		case network.UartPing:
 			this.uartProcessor.SendPong()
 		}
+		// runtime.Gosched()
 	}
 }
 
@@ -150,22 +151,22 @@ func (this *PicoW) debugPing() {
 		case <-time.After(5 * time.Second):
 			this.uartProcessor.WriteMessage("Hello from RPi!")
 		}
+		// runtime.Gosched()
 	}
 }
 
 func (this *PicoW) StartScreen() {
-	if this.display == nil {
-		this.logger.Debug("Initializing screen...")
-		this.display = component.NewDisplay()
-	}
-
+	this.initDisplay()
 	go this.screen()
 	// go this.touch()
 }
 
 func (this *PicoW) screen() {
 	this.logger.Debug("Drawing on screen...")
-	this.display.Draw()
+	this.display.DrawBackground()
+	this.display.DrawImage()
+	this.display.DrawText()
+	// runtime.Gosched()
 }
 
 func (this *PicoW) touch() {
@@ -176,6 +177,15 @@ func (this *PicoW) touch() {
 		if point.X != 0 || point.Y != 0 {
 			this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
 		}
-		time.Sleep(500 * time.Millisecond)
+		// runtime.Gosched()
 	}
+}
+
+func (this *PicoW) initDisplay() {
+	if this.display != nil {
+		return
+	}
+
+	this.logger.Debug("Initializing screen...")
+	this.display = component.NewDisplay()
 }

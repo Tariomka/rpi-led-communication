@@ -20,7 +20,7 @@ var (
 	ColorDarkGreen = color.RGBA{none, half, none, full}
 	ColorDarkCyan  = color.RGBA{none, half, half, full}
 	ColorMaroon    = color.RGBA{half, none, none, full}
-	ColorPuple     = color.RGBA{half, none, half, full}
+	ColorPurple    = color.RGBA{half, none, half, full}
 	ColorOlive     = color.RGBA{half, half, none, full}
 	ColorLightGray = color.RGBA{light, light, light, full}
 	ColorDarkGray  = color.RGBA{half, half, half, full}

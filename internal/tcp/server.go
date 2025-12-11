@@ -58,7 +58,12 @@ func (this *LedServer) Start() {
 			"New connection aquired:",
 			"connection", connWrapper.connection.RemoteAddr())
 
+		// Currently only 2 threads can be active, so the receive in used in the main thread.
+		// This blocks until connection is closed.
+		// TODO: Investigate if it's possible to have more active threads.
+		// Note: runtime.Gosched() seems to have no effect or gets stuck somewhere.
 		go this.receive(connWrapper)
+		// this.receive(connWrapper)
 	}
 	this.waitGroup.Wait()
 }
@@ -76,6 +81,7 @@ func (this *LedServer) Send(message string) {
 
 func (this *LedServer) receive(connection *Connection) {
 	defer this.removeConnection(connection)
+	this.logger.Debug("!!! Receive started")
 	for {
 		packet, err := connection.ReadPacket()
 		if err != nil {

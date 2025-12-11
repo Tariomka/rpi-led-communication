@@ -44,6 +44,7 @@ func (this *PicoRunner) Start() {
 	this.PicoW.TurnLed(true)
 	// go this.receiveUartMessages()
 	this.PicoW.StartScreen()
+	// go this.runnLoop()
 	this.Server.Start()
 }
 
@@ -73,4 +74,10 @@ func (this *PicoRunner) receiveUartMessages() {
 	for {
 		this.PicoW.ReceiveFromUart()
 	}
+}
+
+func (this *PicoRunner) runnLoop() {
+	this.Logger.Debug("!!! Runn loop started")
+	this.PicoW.StartScreen()
+	this.PicoW.ProcessUart()
 }

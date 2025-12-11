@@ -42,6 +42,7 @@ type PicoW struct {
 	uartProcessor *network.UartProcessor
 
 	config PicoConfig
+	timer  <-chan time.Time
 }
 
 func NewPicoW(config PicoConfig, logger *slog.Logger) *PicoW {
@@ -52,6 +53,7 @@ func NewPicoW(config PicoConfig, logger *slog.Logger) *PicoW {
 		uartProcessor: network.NewUartProcessor(uart),
 		logger:        logger,
 		config:        config,
+		timer:         time.Tick(5 * time.Second),
 	}
 }
 
@@ -72,6 +74,11 @@ func (this *PicoW) ReceiveFromUart() {
 	go this.debugPing()
 	// this.unprocessedReceiveFromUart()
 	this.processedReceiveFromUart()
+}
+
+func (this *PicoW) ProcessUart() {
+	this.receiveFromUart()
+	this.ping()
 }
 
 func (this *PicoW) SentToUart(payload []byte) {
@@ -123,6 +130,35 @@ func (this *PicoW) processedReceiveFromUart() {
 	}
 }
 
+func (this *PicoW) receiveFromUart() {
+	dType, content, err := this.uartProcessor.Read()
+	if err != nil {
+		this.logger.Warn("Unexpected error while listening to UART", "error", err)
+		this.uartProcessor.Desynchronize()
+		return
+	}
+
+	switch dType {
+	case network.UartEmpty:
+		this.logger.Debug("Received empty message", "content", content)
+	case network.UartMessage:
+		this.logger.Debug("Received message", "content", string(content))
+	case network.UartBytes:
+		this.logger.Debug("Received bytes", "content", content)
+	case network.UartPing:
+		this.uartProcessor.SendPong()
+	}
+}
+
+func (this *PicoW) ping() {
+	this.logger.Debug("!!! Ping")
+	select {
+	case <-this.timer:
+		// this.uartProcessor.SendPing()
+		this.uartProcessor.WriteMessage("Hello from RPi!")
+	}
+}
+
 func (this *PicoW) unprocessedReceiveFromUart() {
 	for {
 		content, err := this.uartProcessor.ReadWithoutProcessing()
@@ -157,7 +193,9 @@ func (this *PicoW) debugPing() {
 
 func (this *PicoW) StartScreen() {
 	this.initDisplay()
-	go this.screen()
+	this.screen()
+	this.touch()
+	// go this.screen()
 	// go this.touch()
 }
 
@@ -170,15 +208,16 @@ func (this *PicoW) screen() {
 }
 
 func (this *PicoW) touch() {
-	this.logger.Debug("Listening to touch...")
-	for {
-		this.logger.Debug("Reading touch...")
-		point := this.display.ReadTouch()
-		if point.X != 0 || point.Y != 0 {
-			this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
-		}
-		// runtime.Gosched()
+	// for {
+	this.logger.Debug("Reading touch...")
+	point := this.display.ReadTouch()
+	if point.X != 0 || point.Y != 0 {
+		this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
+	} else {
+		this.logger.Debug("No touch detected")
 	}
+	// runtime.Gosched()
+	// }
 }
 
 func (this *PicoW) initDisplay() {

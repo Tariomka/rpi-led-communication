@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"strings"
 	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
@@ -31,7 +30,7 @@ type WirelessChip struct {
 
 func NewWirelessChip(logger *slog.Logger) *WirelessChip {
 	device := cyw43439.NewPicoWDevice()
-	mustInitDevice(device)
+	MustInitDevice(device)
 
 	if logger == nil {
 		logger = common.NewNoopLogger()
@@ -53,7 +52,7 @@ func (this *WirelessChip) Connect(ssid, pass, staticIp, hostname string) error {
 
 	go this.handlePackets()
 
-	address, err := getAddress(staticIp)
+	address, err := common.GetAddress(staticIp)
 	if err != nil {
 		return err
 	}
@@ -128,72 +127,6 @@ func (this *WirelessChip) configureTcpStack() error {
 	return nil
 }
 
-// Haven't checked what this does, it is taken from the example
-func (this *WirelessChip) handlePackets() {
-	var queue [queueSize][cyw43439.MTU]byte
-	var lenBuf [queueSize]int
-	var retries [queueSize]int
-	markSent := func(i int) {
-		queue[i] = [cyw43439.MTU]byte{} // Not really necessary.
-		lenBuf[i] = 0
-		retries[i] = 0
-	}
-	for {
-		stallRx := true
-		// Poll for incoming packets.
-		for i := 0; i < 1; i++ {
-			gotPacket, _ := this.device.PollOne()
-			if !gotPacket {
-				break
-			}
-			stallRx = false
-		}
-
-		// Queue packets to be sent.
-		for i := range queue {
-			if retries[i] != 0 {
-				continue // Packet currently queued for retransmission.
-			}
-			var err error
-			buf := queue[i][:]
-			lenBuf[i], err = this.stack.HandleEth(buf[:])
-			if err != nil {
-				lenBuf[i] = 0
-				continue
-			}
-			if lenBuf[i] == 0 {
-				break
-			}
-		}
-		stallTx := lenBuf == [queueSize]int{}
-		if stallTx {
-			if stallRx {
-				// Avoid busy waiting when both Rx and Tx stall.
-				time.Sleep(51 * time.Millisecond)
-			}
-			continue
-		}
-
-		// Send queued packets.
-		for i := range queue {
-			n := lenBuf[i]
-			if n <= 0 {
-				continue
-			}
-			err := this.device.SendEth(queue[i][:n])
-			if err != nil {
-				// Queue packet for retransmission.
-				retries[i]++
-				if retries[i] > maxRetries {
-					markSent(i)
-				}
-			} else {
-				markSent(i)
-			}
-		}
-	}
-}
-
 func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error {
 	dhcpClient := stacks.NewDHCPClient(this.stack, dhcp.DefaultClientPort)
 	dhcpConfig := stacks.DHCPRequestConfig{
@@ -253,20 +186,96 @@ func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error
 	return nil
 }
 
-func mustInitDevice(device *cyw43439.Device) {
-	config := cyw43439.DefaultWifiBluetoothConfig()
-	config.Logger = common.NewNoopLogger()
-	if err := device.Init(config); err != nil {
-		panic("Failed to initialize Pico W wireless interface: " + err.Error())
+// This was taken from the example and refactored
+func (this *WirelessChip) handlePackets() {
+	queue := newPacketQueue()
+	for {
+		stallRx := !this.isPacketAvailable()
+		queue.enqueue(this.stack.HandleEth)
+
+		stallTx := queue.isQueueEmpty()
+		if stallTx {
+			if stallRx {
+				time.Sleep(50 * time.Millisecond) // Avoid busy waiting when both Rx and Tx stall.
+			}
+			continue
+		}
+
+		queue.sendQueued(this.device.SendEth)
 	}
 }
 
-func getAddress(staticIp string) (netip.Addr, error) {
-	var address netip.Addr
+func (this *WirelessChip) isPacketAvailable() bool {
+	gotPacket, _ := this.device.PollOne()
+	return gotPacket
+}
 
-	if strings.TrimSpace(staticIp) == "" {
-		return address, nil
+type packetInstance struct {
+	bufferLen int
+	buffer    [cyw43439.MTU]byte
+	retries   int
+}
+
+func newPacketInstance() packetInstance {
+	return packetInstance{
+		bufferLen: 0,
+		buffer:    [cyw43439.MTU]byte{},
+		retries:   0,
 	}
+}
 
-	return netip.ParseAddr(staticIp)
+type packetQueue [queueSize]packetInstance
+
+func newPacketQueue() *packetQueue {
+	return &packetQueue{}
+}
+
+func (this *packetQueue) clean(index int) {
+	this[index] = packetInstance{}
+}
+
+func (this *packetQueue) enqueue(handleEth func([]byte) (int, error)) {
+	for index := range this {
+		if this[index].retries != 0 {
+			continue // Packet currently queued for retransmission.
+		}
+		var err error
+		buf := this[index].buffer[:]
+		this[index].bufferLen, err = handleEth(buf)
+		if err != nil {
+			this[index].bufferLen = 0
+			continue
+		}
+		if this[index].bufferLen == 0 {
+			break
+		}
+	}
+}
+
+func (this *packetQueue) sendQueued(sendEth func([]byte) error) {
+	for index := range this {
+		n := this[index].bufferLen
+		if n <= 0 {
+			continue
+		}
+		err := sendEth(this[index].buffer[:n])
+		if err != nil {
+			// Queue packet for retransmission.
+			this[index].retries++
+			if this[index].retries > maxRetries {
+				this.clean(index)
+			}
+		} else {
+			this.clean(index)
+		}
+	}
+}
+
+func (this *packetQueue) isQueueEmpty() bool {
+	for index := range this {
+		if this[index].bufferLen > 0 {
+			return false
+		}
+	}
+	return true
 }

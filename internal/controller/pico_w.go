@@ -101,6 +101,7 @@ func (this *PicoW) TurnLed(on bool) {
 func (this *PicoW) processedReceiveFromUart() {
 	retries := 0
 	for {
+		this.logger.Debug("Goroutine 1", "data", "inner infinite loop aaaaaaaaaaaaaaaaaaa")
 		time.Sleep(1 * time.Second)
 		dType, content, err := this.uartProcessor.Read()
 		if err != nil {
@@ -182,19 +183,22 @@ func (this *PicoW) unprocessedReceiveFromUart() {
 }
 
 func (this *PicoW) debugPing() {
+	this.logger.Debug("Goroutine 2", "data", "Once: Debug Ping")
 	for {
 		select {
 		case <-time.After(5 * time.Second):
+			this.logger.Debug("Goroutine 2", "data", "Infinite loop: Debug Ping")
 			this.uartProcessor.WriteMessage("Hello from RPi!")
 		}
-		// runtime.Gosched()
 	}
 }
 
 func (this *PicoW) StartScreen() {
+	this.logger.Debug("Goroutine 3", "data", "Once: screen")
 	this.initDisplay()
-	this.screen()
-	this.touch()
+	// this.screen()
+	// this.touch()
+
 	// go this.screen()
 	// go this.touch()
 }
@@ -202,9 +206,8 @@ func (this *PicoW) StartScreen() {
 func (this *PicoW) screen() {
 	this.logger.Debug("Drawing on screen...")
 	this.display.DrawBackground()
-	this.display.DrawImage()
+	// this.display.DrawImage()
 	this.display.DrawText()
-	// runtime.Gosched()
 }
 
 func (this *PicoW) touch() {
@@ -216,7 +219,6 @@ func (this *PicoW) touch() {
 	} else {
 		this.logger.Debug("No touch detected")
 	}
-	// runtime.Gosched()
 	// }
 }
 

@@ -41,7 +41,9 @@ func NewServer(listener net.Listener, logger *slog.Logger) (Server, error) {
 
 func (this *LedServer) Start() {
 	this.logger.Debug("Starting up server")
+	this.logger.Debug("Main thread", "data", "Starting up server")
 	for {
+		this.logger.Debug("Main thread", "data", "Infinite loop: waiting for connection")
 		connection, err := this.listener.Accept()
 		if err != nil {
 			this.logger.Error("Failed to accept connection:", "error", err)
@@ -58,12 +60,7 @@ func (this *LedServer) Start() {
 			"New connection aquired:",
 			"connection", connWrapper.connection.RemoteAddr())
 
-		// Currently only 2 threads can be active, so the receive in used in the main thread.
-		// This blocks until connection is closed.
-		// TODO: Investigate if it's possible to have more active threads.
-		// Note: runtime.Gosched() seems to have no effect or gets stuck somewhere.
 		go this.receive(connWrapper)
-		// this.receive(connWrapper)
 	}
 	this.waitGroup.Wait()
 }
@@ -79,10 +76,12 @@ func (this *LedServer) Send(message string) {
 	this.broadcast(network.NewMessagePacket(message))
 }
 
+// Must be a goroutine
 func (this *LedServer) receive(connection *Connection) {
 	defer this.removeConnection(connection)
-	this.logger.Debug("!!! Receive started")
+	this.logger.Debug("Goroutine 4", "data", "Once on connect: Receive started")
 	for {
+		this.logger.Debug("Goroutine 4", "data", "Infinite loop: Receive loop")
 		packet, err := connection.ReadPacket()
 		if err != nil {
 			switch err {
@@ -114,6 +113,7 @@ func (this *LedServer) receive(connection *Connection) {
 			"version", packet.Version,
 			"type", packet.Type,
 			"data", packet.Data)
+		connection.WritePacket(network.NewMessagePacket("Packet received"))
 	}
 }
 

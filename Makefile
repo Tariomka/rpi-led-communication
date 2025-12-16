@@ -1,5 +1,6 @@
 BIN_DIR = bin
 BIN_NAME = rpi_led_com
+BUILD_FLAGS = -gc=precise -opt=2 -no-debug
 ifdef OS
 	VERSION = v$(strip $(shell cmd /C date /t))_$(subst :,-,$(shell cmd /C time /t))
 	RM = del /s /q
@@ -13,7 +14,7 @@ endif
 flash: add_config
 	@echo Starting to flash Tinygo binary to Raspberry PI Pico, please wait...
 	@echo If prompted please remount Raspberry PI Pico
-	@tinygo flash -target=pico-w -size full ./main.go
+	@tinygo flash -target=pico-w $(BUILD_FLAGS) -size full ./main.go
 	@echo Flashing finished.
 	@echo Starting monitoring:
 	@tinygo monitor

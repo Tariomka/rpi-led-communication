@@ -3,6 +3,8 @@ package component
 import (
 	"machine"
 
+	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"github.com/soypat/cyw43439"
 	"tinygo.org/x/drivers/ili9341"
 	"tinygo.org/x/drivers/xpt2046"
 )
@@ -63,4 +65,12 @@ func NewTouchScreen(clk, cs, din, dout, irq machine.Pin) *xpt2046.Device {
 	device.Configure(&xpt2046.Config{Precision: 12})
 
 	return &device
+}
+
+func MustInitDevice(device *cyw43439.Device) {
+	config := cyw43439.DefaultWifiBluetoothConfig()
+	config.Logger = common.NewNoopLogger()
+	if err := device.Init(config); err != nil {
+		panic("Failed to initialize Pico W wireless interface: " + err.Error())
+	}
 }

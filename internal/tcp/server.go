@@ -58,7 +58,7 @@ func (this *LedServer) Start() {
 		this.conns.Store(connWrapper, true)
 		this.logger.Debug(
 			"New connection aquired:",
-			"connection", connWrapper.connection.RemoteAddr())
+			"connection", connWrapper.connection.RemoteAddr().String())
 
 		go this.receive(connWrapper)
 	}
@@ -79,6 +79,10 @@ func (this *LedServer) Send(message string) {
 // Must be a goroutine
 func (this *LedServer) receive(connection *Connection) {
 	defer this.removeConnection(connection)
+
+	// When client disconnects, RemoteAddr() returns empty
+	connAddress := connection.connection.RemoteAddr().String()
+
 	this.logger.Debug("Goroutine 4", "data", "Once on connect: Receive started")
 	for {
 		this.logger.Debug("Goroutine 4", "data", "Infinite loop: Receive loop")
@@ -86,9 +90,7 @@ func (this *LedServer) receive(connection *Connection) {
 		if err != nil {
 			switch err {
 			case io.EOF:
-				this.logger.Info(
-					"User disconnected:",
-					"connection", connection.connection.RemoteAddr())
+				this.logger.Info("User disconnected:", "connection", connAddress)
 			default:
 				this.logger.Error("Failed to read data from connection:", "error", err)
 			}

@@ -2,7 +2,7 @@ module github.com/Tariomka/rpi-led-communication
 
 go 1.25.5
 
-// tinygo 0.40.1
+// tinygo 0.39.0
 
 require (
 	github.com/Tariomka/led-common-lib v0.4.3

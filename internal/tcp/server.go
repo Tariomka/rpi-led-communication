@@ -56,7 +56,7 @@ func (this *LedServer) Start() {
 		}
 
 		this.conns.Store(connWrapper, true)
-		this.logger.Debug(
+		this.logger.Info(
 			"New connection aquired:",
 			"connection", connWrapper.connection.RemoteAddr().String())
 
@@ -80,7 +80,7 @@ func (this *LedServer) Send(message string) {
 func (this *LedServer) receive(connection *Connection) {
 	defer this.removeConnection(connection)
 
-	// When client disconnects, RemoteAddr() returns empty
+	// When client disconnects, RemoteAddr() returns empty address, so it needs to be stored early.
 	connAddress := connection.connection.RemoteAddr().String()
 
 	this.logger.Debug("Goroutine 4", "data", "Once on connect: Receive started")

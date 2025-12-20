@@ -15,7 +15,6 @@ import (
 const (
 	verticalOffset   = 0
 	horizontalOffset = 0
-	// horizontalOffset = 42
 )
 
 type Display struct {
@@ -55,17 +54,10 @@ func NewDisplay() *Display {
 	NewOutputPin(machine.GP14).High() // Main Power
 	backlight := NewOutputPin(machine.GP15)
 	backlight.High()
-
-	spi := NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
-	screen := NewLCDScreen(
-		spi,
-		machine.GP6,
-		machine.GP7,
-		machine.GP8)
-	screen.FillScreen(common.ColorRed)
+	NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
 
 	return &Display{
-		lcd: screen,
+		// lcd: screen,
 		touch: NewTouchScreen(
 			machine.GP18,
 			machine.GP17,
@@ -84,7 +76,7 @@ func (this *Display) DrawBackground() {
 func (this *Display) DrawText() {
 	text := "Kas Skatys, Tas Gaidys!"
 
-	// tinyfont.WriteLine(this.lcd, &proggy.TinySZ8pt7b, horizontalOffset, 70, text, common.ColorGreen)
+	tinyfont.WriteLine(this.lcd, &proggy.TinySZ8pt7b, horizontalOffset, 70, text, common.ColorGreen)
 	tinyfont.WriteLineRotated(
 		this.lcd,
 		&proggy.TinySZ8pt7b,
@@ -115,4 +107,20 @@ func (this *Display) ReadTouch() touch.Point {
 	}
 
 	return touch.Point{}
+}
+
+func (this *Display) InitScreen() {
+	if this.lcd != nil {
+		return
+	}
+
+	this.lcd = NewLCDScreen( // this kills the tcp server
+		machine.SPI1,
+		machine.GP6,
+		machine.GP7,
+		machine.GP8)
+}
+
+func (this *Display) DemoBackground() {
+	this.lcd.FillScreen(common.ColorRed)
 }

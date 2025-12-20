@@ -45,8 +45,9 @@ func (this *PicoRunner) Start() {
 
 	this.Logger.Debug("Main Thread", "data", "Starting runner main goroutines")
 	go this.receiveUartMessages()
-	// this.PicoW.StartScreen() // this kills the tcp server
+	this.PicoW.StartScreen()
 	// go this.runnLoop()
+	// this.runnLoop()
 	this.Server.Start()
 }
 
@@ -72,6 +73,7 @@ func (this *PicoRunner) connectAndListen() error {
 	return err
 }
 
+// Should the uart receiver be a blocking function or a single iteration function?
 func (this *PicoRunner) receiveUartMessages() {
 	this.Logger.Debug("Goroutine 1", "data", "Once: Starting to receive from UART")
 	for {
@@ -80,8 +82,8 @@ func (this *PicoRunner) receiveUartMessages() {
 	}
 }
 
-// func (this *PicoRunner) runnLoop() {
-// 	this.Logger.Debug("!!! Runn loop started")
-// 	this.PicoW.StartScreen()
-// 	this.PicoW.ProcessUart()
-// }
+func (this *PicoRunner) runnLoop() {
+	this.Logger.Debug("!!! Runn loop started")
+	this.PicoW.StartScreen()
+	this.PicoW.ProcessUart()
+}

@@ -53,6 +53,8 @@ func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
 func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
 	device := ili9341.NewSPI(spi, dc, cs, reset)
 	device.Configure(ili9341.Config{
+		Width:            240,
+		Height:           320,
 		Rotation:         ili9341.Rotation270,
 		DisplayInversion: false,
 	})

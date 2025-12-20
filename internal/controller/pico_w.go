@@ -48,8 +48,8 @@ type PicoW struct {
 func NewPicoW(config PicoConfig, logger *slog.Logger) *PicoW {
 	uart := component.NewConfiguredUart(machine.UART0, machine.GP2)
 	return &PicoW{
-		wirelessChip: component.NewWirelessChip(logger),
-		// display:        component.NewDisplay(),
+		wirelessChip:  component.NewWirelessChip(logger),
+		display:       component.NewDisplay(),
 		uartProcessor: network.NewUartProcessor(uart),
 		logger:        logger,
 		config:        config,
@@ -127,7 +127,6 @@ func (this *PicoW) processedReceiveFromUart() {
 		case network.UartPing:
 			this.uartProcessor.SendPong()
 		}
-		// runtime.Gosched()
 	}
 }
 
@@ -194,13 +193,12 @@ func (this *PicoW) debugPing() {
 }
 
 func (this *PicoW) StartScreen() {
-	this.logger.Debug("Goroutine 3", "data", "Once: screen")
-	this.initDisplay()
+	// this.logger.Debug("Goroutine 3", "data", "Once: screen")
+	// this.display.InitScreen()
 	// this.screen()
-	// this.touch()
 
 	// go this.screen()
-	// go this.touch()
+	go this.touch()
 }
 
 func (this *PicoW) screen() {
@@ -211,22 +209,14 @@ func (this *PicoW) screen() {
 }
 
 func (this *PicoW) touch() {
-	// for {
-	this.logger.Debug("Reading touch...")
-	point := this.display.ReadTouch()
-	if point.X != 0 || point.Y != 0 {
-		this.logger.Info("Touch detected", "X", point.X, "Y", point.Y, "Z", point.Z)
-	} else {
-		this.logger.Debug("No touch detected")
+	this.logger.Debug("Goroutine 3", "data", "Once: screen")
+	for {
+		point := this.display.ReadTouch()
+		if point.X != 0 || point.Y != 0 {
+			this.logger.Info("Touch detected", "Point", point)
+		} else {
+			// this.logger.Debug("No touch detected")
+		}
+		time.Sleep(1 * time.Second)
 	}
-	// }
-}
-
-func (this *PicoW) initDisplay() {
-	if this.display != nil {
-		return
-	}
-
-	this.logger.Debug("Initializing screen...")
-	this.display = component.NewDisplay()
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"github.com/Tariomka/rpi-led-communication/internal/global"
 )
 
 type Server interface {
@@ -116,6 +117,8 @@ func (this *LedServer) receive(connection *Connection) {
 			"type", packet.Type,
 			"data", packet.Data)
 		connection.WritePacket(network.NewMessagePacket("Packet received"))
+		global.InitDisplay()
+		global.DrawFrame()
 	}
 }
 

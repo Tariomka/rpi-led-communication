@@ -9,6 +9,7 @@ import (
 
 	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/component"
+	"github.com/Tariomka/rpi-led-communication/internal/global"
 )
 
 const (
@@ -193,11 +194,11 @@ func (this *PicoW) debugPing() {
 }
 
 func (this *PicoW) StartScreen() {
-	// this.logger.Debug("Goroutine 3", "data", "Once: screen")
 	// this.display.InitScreen()
+	global.InitDisplay = this.display.InitScreen
 	// this.screen()
+	global.DrawFrame = this.screen
 
-	// go this.screen()
 	go this.touch()
 }
 

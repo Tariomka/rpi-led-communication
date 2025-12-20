@@ -76,12 +76,17 @@ func (this *Display) DrawBackground() {
 func (this *Display) DrawText() {
 	text := "Kas Skatys, Tas Gaidys!"
 
-	tinyfont.WriteLine(this.lcd, &proggy.TinySZ8pt7b, horizontalOffset, 70, text, common.ColorGreen)
+	tinyfont.WriteLine(
+		this.lcd,
+		&proggy.TinySZ8pt7b,
+		horizontalOffset+90, 70,
+		text,
+		common.ColorGreen)
+
 	tinyfont.WriteLineRotated(
 		this.lcd,
 		&proggy.TinySZ8pt7b,
-		horizontalOffset+10,
-		50,
+		horizontalOffset+10, 50,
 		text,
 		common.ColorMagenta,
 		tinyfont.ROTATION_90)
@@ -89,8 +94,7 @@ func (this *Display) DrawText() {
 	tinyfont.WriteLineRotated(
 		this.lcd,
 		&proggy.TinySZ8pt7b,
-		horizontalOffset+310,
-		190,
+		horizontalOffset+310, 190,
 		text,
 		common.ColorRed,
 		tinyfont.ROTATION_270)

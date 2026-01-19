@@ -5,7 +5,6 @@ import (
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"tinygo.org/x/drivers/ili9341"
-	"tinygo.org/x/drivers/pixel"
 	"tinygo.org/x/drivers/touch"
 	"tinygo.org/x/drivers/xpt2046"
 	"tinygo.org/x/tinyfont"
@@ -54,10 +53,13 @@ func NewDisplay() *Display {
 	NewOutputPin(machine.GP14).High() // Main Power
 	backlight := NewOutputPin(machine.GP15)
 	backlight.High()
-	NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
+
+	spi := NewSpiOutput(machine.SPI1, machine.SPI1_SCK_PIN, machine.SPI1_SDO_PIN)
+	screen := NewLCDScreen(spi, machine.GP6, machine.GP7, machine.GP8)
+	screen.FillScreen(common.ColorRed)
 
 	return &Display{
-		// lcd: screen,
+		lcd: screen,
 		touch: NewTouchScreen(
 			machine.GP18,
 			machine.GP17,
@@ -100,29 +102,12 @@ func (this *Display) DrawText() {
 		tinyfont.ROTATION_270)
 }
 
-func (this *Display) DrawImage() {
-	image := pixel.NewImageFromBytes[pixel.RGB565BE](240, 240, embededImage)
-	this.lcd.DrawBitmap(horizontalOffset+40, verticalOffset, image)
-}
-
 func (this *Display) ReadTouch() touch.Point {
 	if this.touch.Touched() {
 		return this.touch.ReadTouchPoint()
 	}
 
 	return touch.Point{}
-}
-
-func (this *Display) InitScreen() {
-	if this.lcd != nil {
-		return
-	}
-
-	this.lcd = NewLCDScreen( // this kills the tcp server
-		machine.SPI1,
-		machine.GP6,
-		machine.GP7,
-		machine.GP8)
 }
 
 func (this *Display) DemoBackground() {

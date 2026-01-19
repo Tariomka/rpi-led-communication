@@ -8,7 +8,6 @@ import (
 
 	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
-	"github.com/Tariomka/rpi-led-communication/internal/global"
 )
 
 type Server interface {
@@ -42,9 +41,7 @@ func NewServer(listener net.Listener, logger *slog.Logger) (Server, error) {
 
 func (this *LedServer) Start() {
 	this.logger.Debug("Starting up server")
-	this.logger.Debug("Main thread", "data", "Starting up server")
 	for {
-		this.logger.Debug("Main thread", "data", "Infinite loop: waiting for connection")
 		connection, err := this.listener.Accept()
 		if err != nil {
 			this.logger.Error("Failed to accept connection:", "error", err)
@@ -84,9 +81,7 @@ func (this *LedServer) receive(connection *Connection) {
 	// When client disconnects, RemoteAddr() returns empty address, so it needs to be stored early.
 	connAddress := connection.connection.RemoteAddr().String()
 
-	this.logger.Debug("Goroutine 4", "data", "Once on connect: Receive started")
 	for {
-		this.logger.Debug("Goroutine 4", "data", "Infinite loop: Receive loop")
 		packet, err := connection.ReadPacket()
 		if err != nil {
 			switch err {
@@ -117,8 +112,6 @@ func (this *LedServer) receive(connection *Connection) {
 			"type", packet.Type,
 			"data", packet.Data)
 		connection.WritePacket(network.NewMessagePacket("Packet received"))
-		global.InitDisplay()
-		global.DrawFrame()
 	}
 }
 

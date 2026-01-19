@@ -9,7 +9,6 @@ import (
 
 	"github.com/Tariomka/led-common-lib/pkg/network"
 	"github.com/Tariomka/rpi-led-communication/internal/component"
-	"github.com/Tariomka/rpi-led-communication/internal/global"
 )
 
 const (
@@ -36,8 +35,8 @@ type PicoConfig struct {
 }
 
 type PicoW struct {
-	wirelessChip *component.WirelessChip
 	display      *component.Display
+	wirelessChip *component.WirelessChip
 
 	logger        *slog.Logger
 	uartProcessor *network.UartProcessor
@@ -49,8 +48,8 @@ type PicoW struct {
 func NewPicoW(config PicoConfig, logger *slog.Logger) *PicoW {
 	uart := component.NewConfiguredUart(machine.UART0, machine.GP2)
 	return &PicoW{
+		display:       component.NewDisplay(), // Must be registered before Cyw43439
 		wirelessChip:  component.NewWirelessChip(logger),
-		display:       component.NewDisplay(),
 		uartProcessor: network.NewUartProcessor(uart),
 		logger:        logger,
 		config:        config,
@@ -102,7 +101,6 @@ func (this *PicoW) TurnLed(on bool) {
 func (this *PicoW) processedReceiveFromUart() {
 	retries := 0
 	for {
-		this.logger.Debug("Goroutine 1", "data", "inner infinite loop aaaaaaaaaaaaaaaaaaa")
 		time.Sleep(1 * time.Second)
 		dType, content, err := this.uartProcessor.Read()
 		if err != nil {
@@ -152,7 +150,6 @@ func (this *PicoW) receiveFromUart() {
 }
 
 func (this *PicoW) ping() {
-	this.logger.Debug("!!! Ping")
 	select {
 	case <-this.timer:
 		// this.uartProcessor.SendPing()
@@ -183,36 +180,27 @@ func (this *PicoW) unprocessedReceiveFromUart() {
 }
 
 func (this *PicoW) debugPing() {
-	this.logger.Debug("Goroutine 2", "data", "Once: Debug Ping")
 	for {
 		select {
 		case <-time.After(5 * time.Second):
-			this.logger.Debug("Goroutine 2", "data", "Infinite loop: Debug Ping")
 			this.uartProcessor.WriteMessage("Hello from RPi!")
 		}
 	}
 }
 
 func (this *PicoW) StartScreen() {
-	// this.display.InitScreen()
-	global.InitDisplay = this.display.InitScreen
-	// this.screen()
-	global.DrawFrame = this.screen
-
+	this.screen()
 	go this.touch()
 }
 
 func (this *PicoW) screen() {
-	this.logger.Debug("Drawing on screen...")
 	this.display.DrawBackground()
-	// this.display.DrawImage()
 	this.display.DrawText()
 }
 
 func (this *PicoW) touch() {
-	this.logger.Debug("Goroutine 3", "data", "Once: screen")
 	for {
-		point := this.display.ReadTouch()
+		point := this.display.ReadTouch() // TODO: Maybe use goroutine and block to not spam CPU?
 		if point.X != 0 || point.Y != 0 {
 			this.logger.Info("Touch detected", "Point", point)
 		} else {

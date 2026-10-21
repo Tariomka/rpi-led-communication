@@ -16,12 +16,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.24'
+        go-version: '1.27.2'
 
     - name: Set up Tinygo
       uses: acifani/setup-tinygo@v2
       with:
-        tinygo-version: '0.38.0'
+        tinygo-version: '0.43.0'
 
     - name: Checks
       run: |
@@ -29,4 +29,4 @@ jobs:
         tinygo version
 
     - name: Build
-      run: tinygo build -o build.uf2 -target=pico-w -size full ./main.go
+      run: tinygo build -o build.uf2 -target=pico-w -size full ./cmd/rpi_led_com

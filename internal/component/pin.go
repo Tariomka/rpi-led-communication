@@ -1,6 +1,13 @@
 package component
 
-import "machine"
+import (
+	"machine"
+
+	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"github.com/soypat/cyw43439"
+	"tinygo.org/x/drivers/ili9341"
+	"tinygo.org/x/drivers/xpt2046"
+)
 
 // Pin that's setup for Input mode
 type InputPin struct{ machine.Pin }
@@ -20,13 +27,51 @@ func NewOutputPin(pin machine.Pin) OutputPin {
 	return output
 }
 
+func NewSpiOutput(spi *machine.SPI, sck, sdo machine.Pin) *machine.SPI {
+	spi.Configure(machine.SPIConfig{
+		Frequency: 40 * machine.MHz,
+		SCK:       sck,
+		SDO:       sdo,
+		SDI:       machine.SPI1_SDI_PIN,
+		Mode:      0b10,
+	})
+
+	return spi
+}
+
 type UART struct{ *machine.UART }
 
-func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
+func NewConfiguredUart(uart *machine.UART) UART {
 	device := UART{UART: uart}
-	device.Configure(machine.UARTConfig{})
-
-	NewOutputPin(powerPin).High()
+	device.Configure(machine.UARTConfig{BaudRate: 115200}) // the cube's UART1: 115200 8N1
 
 	return device
+}
+
+func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
+	device := ili9341.NewSPI(DisplaySPI{spi}, dc, cs, reset)
+	device.Configure(ili9341.Config{
+		Width:            240,
+		Height:           320,
+		Rotation:         ili9341.Rotation270,
+		DisplayInversion: false,
+	})
+
+	return device
+}
+
+func NewTouchScreen(clk, cs, din, dout, irq machine.Pin) *xpt2046.Device {
+	device := xpt2046.New(clk, cs, din, dout, irq)
+	// Precision is the number of samples averaged per read; the bit-banged reads block the main loop.
+	device.Configure(&xpt2046.Config{Precision: 4})
+
+	return &device
+}
+
+func MustInitDevice(device *cyw43439.Device) {
+	config := cyw43439.DefaultWifiConfig()
+	config.Logger = common.NewNoopLogger()
+	if err := device.Init(config); err != nil {
+		panic("Failed to initialize Pico W wireless interface: " + err.Error())
+	}
 }

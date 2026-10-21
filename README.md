@@ -30,7 +30,6 @@ Run the task runner from the repository root (the firmware itself is in `./cmd/r
 
 ```bash
 go run . build           # bin/rpi_led_com.uf2
-go run . flash [port]    # flash over USB, then monitor
 go run . monitor [port]  # USB serial log
 ```
 

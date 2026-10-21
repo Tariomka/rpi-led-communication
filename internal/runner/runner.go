@@ -117,7 +117,9 @@ func (this *PicoRunner) startLink(link desktopLink) {
 	}
 
 	this.server = link.server
-	this.ui.SetNetwork(this.picoW.Addr().String() + ":" + strconv.Itoa(int(this.config.Port)))
+	address := this.picoW.Addr().String() + ":" + strconv.Itoa(int(this.config.Port))
+	this.logger.Info("Waiting for the desktop", "address", address)
+	this.ui.SetNetwork(address)
 	this.picoW.TurnLed(true)
 	go this.server.Start()
 }
@@ -212,10 +214,23 @@ func (this *PicoRunner) send(message tcp.Message) {
 type lineWriter struct{ runner *PicoRunner }
 
 func (this lineWriter) Write(data []byte) (int, error) {
-	line := strings.TrimRight(string(data), "\r\n")
+	line := shorten(strings.TrimRight(string(data), "\r\n"))
 	this.runner.log.Add(services.SourcePico, line)
 	this.runner.send(tcp.NewPicoLine(line))
 	return len(data), nil
+}
+
+// shorten turns `level=INFO msg="text" key=value` into `INFO text key=value` to fit the screen.
+func shorten(line string) string {
+	level, rest, ok := strings.Cut(strings.TrimPrefix(line, "level="), " msg=")
+	if !ok {
+		return line
+	}
+	if quoted, err := strconv.QuotedPrefix(rest); err == nil {
+		message, _ := strconv.Unquote(quoted)
+		rest = message + rest[len(quoted):]
+	}
+	return level + " " + rest
 }
 
 func dropTime(groups []string, attr slog.Attr) slog.Attr {

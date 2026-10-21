@@ -49,7 +49,7 @@ func NewConfiguredUart(uart *machine.UART) UART {
 }
 
 func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
-	device := ili9341.NewSPI(spi, dc, cs, reset)
+	device := ili9341.NewSPI(DisplaySPI{spi}, dc, cs, reset)
 	device.Configure(ili9341.Config{
 		Width:            240,
 		Height:           320,
@@ -69,7 +69,7 @@ func NewTouchScreen(clk, cs, din, dout, irq machine.Pin) *xpt2046.Device {
 }
 
 func MustInitDevice(device *cyw43439.Device) {
-	config := cyw43439.DefaultWifiBluetoothConfig()
+	config := cyw43439.DefaultWifiConfig()
 	config.Logger = common.NewNoopLogger()
 	if err := device.Init(config); err != nil {
 		panic("Failed to initialize Pico W wireless interface: " + err.Error())

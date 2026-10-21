@@ -17,6 +17,9 @@ const (
 	maxRetries    = 5
 	queueSize     = 3
 	tcpBufferSize = uint16(512) // MTU - ethhdr - iphdr - tcphdr
+
+	dhcpAttempts = 3
+	dhcpTimeout  = 10 * time.Second
 )
 
 var ledStatus bool
@@ -30,12 +33,14 @@ type WirelessChip struct {
 }
 
 func NewWirelessChip(logger *slog.Logger) *WirelessChip {
-	device := cyw43439.NewPicoWDevice()
-	MustInitDevice(device)
-
 	if logger == nil {
 		logger = common.NewNoopLogger()
 	}
+
+	device := cyw43439.NewPicoWDevice()
+	MustInitDevice(device)
+	logger.Info("Wi-Fi: chip initialized")
+
 	return &WirelessChip{
 		device: device,
 		logger: logger, // set logger to Wifi sender later, to send info to PC/phone
@@ -43,20 +48,20 @@ func NewWirelessChip(logger *slog.Logger) *WirelessChip {
 }
 
 func (this *WirelessChip) Connect(ssid, pass, staticIp, hostname string) error {
-	if err := this.joinWPA2(ssid, pass); err != nil {
+	if ssid == "" {
+		return common.ErrNoWifiConfig
+	}
+	address, err := common.GetAddress(staticIp)
+	if err != nil {
 		return err
 	}
 
+	this.join(ssid, pass)
 	if err := this.configureTcpStack(); err != nil {
 		return err
 	}
 
 	go this.handlePackets()
-
-	address, err := common.GetAddress(staticIp)
-	if err != nil {
-		return err
-	}
 
 	// Even if DHCP fails to provide an IP, connection is still usable
 	// and static IP is used as a fallback
@@ -104,19 +109,20 @@ func (this *WirelessChip) TurnLed(on bool) {
 	this.device.GPIOSet(0, ledStatus)
 }
 
-func (this *WirelessChip) joinWPA2(ssid, password string) error {
-	var err error
-	for i := 0; i < maxRetries; i++ {
-		err = this.device.JoinWPA2(ssid, password)
+// join retries until the network accepts the Pico; Wi-Fi setup runs beside the main loop.
+func (this *WirelessChip) join(ssid, password string) {
+	for attempt := 1; ; attempt++ {
+		this.logger.Info("Wi-Fi: joining", "ssid", ssid, "attempt", attempt)
+		err := this.device.Join(ssid, cyw43439.JoinOptions{Passphrase: password})
 		if err == nil {
-			return nil
+			mac, _ := this.device.HardwareAddr6()
+			this.logger.Info("Wi-Fi: joined", "mac", net.HardwareAddr(mac[:]).String())
+			return
 		}
 
-		this.logger.Error("Wifi join failed", "err", err.Error())
+		this.logger.Error("Wi-Fi: join failed", "error", err.Error(), "retry in", "5s")
 		time.Sleep(5 * time.Second)
 	}
-
-	return err
 }
 
 func (this *WirelessChip) configureTcpStack() error {
@@ -132,42 +138,56 @@ func (this *WirelessChip) configureTcpStack() error {
 		MTU:             cyw43439.MTU,
 		Logger:          common.NewNoopLogger(),
 	})
-	this.device.RecvEthHandle(this.stack.RecvEth)
+	this.device.RecvEthHandle(func(pkt []byte) { this.stack.RecvEth(pkt) })
 	return nil
 }
 
 func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error {
-	dhcpClient := stacks.NewDHCPClient(this.stack, dhcp.DefaultClientPort)
-	dhcpConfig := stacks.DHCPRequestConfig{
-		RequestedAddr: address,
-		Xid:           uint32(time.Now().Nanosecond()),
-		Hostname:      hostname,
-	}
-	if err := dhcpClient.BeginRequest(dhcpConfig); err != nil {
-		return err
-	}
+	for attempt := 1; attempt <= dhcpAttempts; attempt++ {
+		this.logger.Info("DHCP: requesting an address", "attempt", attempt)
+		dhcpClient := stacks.NewDHCPClient(this.stack, dhcp.DefaultClientPort)
+		err := dhcpClient.BeginRequest(stacks.DHCPRequestConfig{
+			RequestedAddr: address,
+			Xid:           uint32(time.Now().UnixNano()) | 1, // must be non-zero
+			Hostname:      hostname,
+		})
+		if err != nil {
+			return err
+		}
 
-	for i := 0; i < maxRetries && dhcpClient.State() != dhcp.StateBound; i++ {
-		this.logger.Debug("DHCP ongoing...")
-		time.Sleep(time.Second / 2)
-		if i > 15 {
-			if !address.IsValid() {
-				this.logger.Error("DHCP did not complete and no static IP was requested")
-				return common.ErrDhcpRequestFailed
-			}
-
-			this.logger.Warn("DHCP did not complete, falling back to static IP")
-			this.stack.SetAddr(address)
+		deadline := time.Now().Add(dhcpTimeout)
+		for dhcpClient.State() != dhcp.StateBound && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+		}
+		if dhcpClient.State() == dhcp.StateBound {
+			this.dhcpBound(dhcpClient)
 			return nil
 		}
+
+		this.logger.Warn("DHCP: no answer", "timeout", dhcpTimeout.String())
+		dhcpClient.Abort()
+		time.Sleep(200 * time.Millisecond) // lets the packet loop drop the aborted client
+		this.stack.CloseUDP(dhcp.DefaultClientPort)
 	}
 
+	if !address.IsValid() {
+		this.logger.Error("DHCP: failed and no static IP is configured")
+		return common.ErrDhcpRequestFailed
+	}
+
+	this.logger.Warn("DHCP: failed, using the static IP", "ip", address.String())
+	this.stack.SetAddr(address)
+	return nil
+}
+
+func (this *WirelessChip) dhcpBound(dhcpClient *stacks.DHCPClient) {
 	var primaryDNS netip.Addr
 	dnsServers := dhcpClient.DNSServers()
 	if len(dnsServers) > 0 {
 		primaryDNS = dnsServers[0]
 	}
 	ip := dhcpClient.Offer()
+	this.logger.Info("DHCP: bound", "ip", ip.String(), "router", dhcpClient.Router().String())
 	this.logger.Debug(
 		"DHCP complete",
 		slog.Uint64("cidrbits", uint64(dhcpClient.CIDRBits())),
@@ -183,16 +203,7 @@ func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error
 		slog.Duration("rebinding", dhcpClient.RebindingTime()),
 	)
 
-	if !ip.Is4() {
-		this.logger.Warn(
-			"DHCP did not provide a valid IP, falling back to static IP",
-			"static IP", address.String())
-		this.stack.SetAddr(address)
-		return nil
-	}
-
 	this.stack.SetAddr(ip) // It's important to set the IP address after DHCP completes.
-	return nil
 }
 
 // This was taken from the example and refactored

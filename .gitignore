@@ -5,6 +5,9 @@
 bin/
 build/
 
+# Agent folder
+.agent/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -30,4 +33,6 @@ go.work.sum
 
 # env file
 .env
+
+.vscode/settings.json
 internal/runner/config.json

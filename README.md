@@ -21,6 +21,18 @@ Before building and flashing the project, create a `config.json` file under `./i
 }
 ```
 
+# Build, flash and monitor
+
+Run the task runner from the repository root (the firmware itself is in `./cmd/rpi_led_com`):
+
+```bash
+go run . build           # bin/rpi_led_com.uf2
+go run . flash [port]    # flash over USB, then monitor
+go run . monitor [port]  # USB serial log
+```
+
+The Makefile targets (`make build`, `make flash`, `make monitor`) do the same.
+
 # Troubleshooting
 
 1. Can't monitor Pico board using USB connection on Linux?

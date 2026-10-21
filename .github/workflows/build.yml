@@ -29,4 +29,4 @@ jobs:
         tinygo version
 
     - name: Build
-      run: tinygo build -o build.uf2 -target=pico-w -size full ./main.go
+      run: tinygo build -o build.uf2 -target=pico-w -size full ./cmd/rpi_led_com

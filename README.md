@@ -1,7 +1,7 @@
 # Requirements
 
-1. Go v1.24.2 or above: [download link](https://go.dev/doc/install).
-2. Tinygo v0.36.0 or above: [installation instructions](https://tinygo.org/getting-started/install/).
+1. Go v1.27.2 or above: [download link](https://go.dev/doc/install).
+2. Tinygo v0.43.0 or above: [installation instructions](https://tinygo.org/getting-started/install/).
 3. Code editor, ex. VS Code.
 4. GNU Make.
 5. Git.
@@ -17,9 +17,12 @@ Before building and flashing the project, create a `config.json` file under `./i
     "Password": "Wifi password",
     "IP": "Static IP, ex.: 192.168.100.100",
     "Port": numeric port, ex.: 1234,
-    "Hostname": "any name for the host"
+    "Hostname": "any name for the host",
+    "Touch": {"SwapXY": true, "X0": 0, "X1": 0, "Y0": 0, "Y1": 0}
 }
 ```
+
+`Touch` is the touchscreen calibration. When it is missing, the Pico asks for three taps on start and logs the `Touch` value to paste here (`go run . monitor` shows it).
 
 # Build, flash and monitor
 

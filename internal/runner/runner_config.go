@@ -4,17 +4,20 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+
+	"github.com/Tariomka/rpi-led-communication/internal/ui"
 )
 
 //go:embed config.json
 var config []byte
 
 type RunnerConfig struct {
-	SSID     string `json:"SSID"`
-	Password string `json:"Password"`
-	IP       string `json:"IP,omitempty"`
-	Port     uint16 `json:"Port"`
-	Hostname string `json:"Hostname"`
+	SSID     string         `json:"SSID"`
+	Password string         `json:"Password"`
+	IP       string         `json:"IP,omitempty"`
+	Port     uint16         `json:"Port"`
+	Hostname string         `json:"Hostname"`
+	Touch    ui.Calibration `json:"Touch"` // calibrated on start when missing
 }
 
 func NewConfig() RunnerConfig {

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"runtime"
 	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
@@ -81,6 +82,14 @@ func (this *WirelessChip) GetListener(listenPort uint16) (net.Listener, error) {
 	}
 
 	return listener, nil
+}
+
+// Addr is the IP address in use, invalid before Connect.
+func (this *WirelessChip) Addr() netip.Addr {
+	if this.stack == nil {
+		return netip.Addr{}
+	}
+	return this.stack.Addr()
 }
 
 func (this *WirelessChip) Blink() {
@@ -190,6 +199,7 @@ func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error
 func (this *WirelessChip) handlePackets() {
 	queue := newPacketQueue()
 	for {
+		runtime.Gosched() // The scheduler is cooperative: let the main loop run between packets.
 		stallRx := !this.isPacketAvailable()
 		queue.enqueue(this.stack.HandleEth)
 

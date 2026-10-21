@@ -41,11 +41,9 @@ func NewSpiOutput(spi *machine.SPI, sck, sdo machine.Pin) *machine.SPI {
 
 type UART struct{ *machine.UART }
 
-func NewConfiguredUart(uart *machine.UART, powerPin machine.Pin) UART {
+func NewConfiguredUart(uart *machine.UART) UART {
 	device := UART{UART: uart}
-	device.Configure(machine.UARTConfig{})
-
-	NewOutputPin(powerPin).High()
+	device.Configure(machine.UARTConfig{BaudRate: 115200}) // the cube's UART1: 115200 8N1
 
 	return device
 }
@@ -64,7 +62,8 @@ func NewLCDScreen(spi *machine.SPI, reset, dc, cs machine.Pin) *ili9341.Device {
 
 func NewTouchScreen(clk, cs, din, dout, irq machine.Pin) *xpt2046.Device {
 	device := xpt2046.New(clk, cs, din, dout, irq)
-	device.Configure(&xpt2046.Config{Precision: 12})
+	// Precision is the number of samples averaged per read; the bit-banged reads block the main loop.
+	device.Configure(&xpt2046.Config{Precision: 4})
 
 	return &device
 }

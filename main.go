@@ -32,7 +32,6 @@ var tasks []task
 func init() {
 	tasks = []task{
 		{"build", "", "TinyGo build into " + uf2File, build},
-		{"flash", "[port]", "Flash the Pico W over USB (remount it if prompted), then monitor", flash},
 		{"monitor", "[port]", "Prints the Pico W's USB serial log", monitor},
 	}
 }
@@ -96,20 +95,6 @@ func build(args []string) error {
 		fmt.Println("Built " + uf2File)
 	}
 	return err
-}
-
-func flash(args []string) error {
-	if err := ensureConfig(); err != nil {
-		return err
-	}
-
-	fmt.Println("Flashing " + firmwarePkg + " ... (remount the Pico W if prompted)")
-	flashArgs := append([]string{"flash", "-target", target}, flashFlags...)
-	flashArgs = append(append(flashArgs, portArgs(args)...), firmwarePkg)
-	if err := execute("tinygo", flashArgs...); err != nil {
-		return err
-	}
-	return monitor(args)
 }
 
 func monitor(args []string) error {

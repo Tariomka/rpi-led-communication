@@ -14,9 +14,16 @@ import (
 )
 
 const (
-	maxRetries    = 5
-	queueSize     = 3
-	tcpBufferSize = uint16(512) // MTU - ethhdr - iphdr - tcphdr
+	maxRetries = 5
+	queueSize  = 3
+
+	// seqs advertises a receive window only when it sends a segment and drops the peer's
+	// zero-window probes, so a connection whose window ever reaches zero stalls for good. The
+	// receive buffer therefore holds the largest desktop message (tcp.HeaderSize + 4 + tcp.MaxChunk
+	// = 2056 bytes) with room to spare; the desktop sends one upload chunk at a time.
+	tcpRxBufferSize = uint16(4096)
+	tcpTxBufferSize = uint16(1024)
+	tcpConnections  = 2 // the desktop and a replacement while the old connection closes
 
 	dhcpAttempts = 3
 	dhcpTimeout  = 10 * time.Second
@@ -74,9 +81,9 @@ func (this *WirelessChip) GetListener(listenPort uint16) (net.Listener, error) {
 	}
 
 	listener, err := stacks.NewTCPListener(this.stack, stacks.TCPListenerConfig{
-		MaxConnections: 3,
-		ConnTxBufSize:  tcpBufferSize,
-		ConnRxBufSize:  tcpBufferSize,
+		MaxConnections: tcpConnections,
+		ConnTxBufSize:  tcpTxBufferSize,
+		ConnRxBufSize:  tcpRxBufferSize,
 	})
 	if err != nil {
 		return nil, err
@@ -208,6 +215,7 @@ func (this *WirelessChip) dhcpBound(dhcpClient *stacks.DHCPClient) {
 
 // This was taken from the example and refactored
 func (this *WirelessChip) handlePackets() {
+	defer Recover("Wi-Fi packet loop")
 	queue := newPacketQueue()
 	for {
 		runtime.Gosched() // The scheduler is cooperative: let the main loop run between packets.

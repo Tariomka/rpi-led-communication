@@ -10,6 +10,7 @@ import (
 
 	"github.com/Tariomka/led-common-lib/pkg/communication/tcp"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"github.com/Tariomka/rpi-led-communication/internal/component"
 	"github.com/Tariomka/rpi-led-communication/internal/controller"
 	"github.com/Tariomka/rpi-led-communication/internal/server"
 	"github.com/Tariomka/rpi-led-communication/internal/services"
@@ -35,6 +36,7 @@ type PicoRunner struct {
 }
 
 func NewRunner(config RunnerConfig) Runner {
+	reset := component.ReadReset() // before anything else runs or crashes
 	runner := &PicoRunner{
 		config:  config,
 		log:     &services.LineLog{},
@@ -48,6 +50,11 @@ func NewRunner(config RunnerConfig) Runner {
 			Level:       slog.LevelInfo,
 			ReplaceAttr: dropTime,
 		})))
+	if reset.Cause == component.ResetCrash || reset.Cause == component.ResetWatchdog || reset.BrownOut {
+		runner.logger.Error("Restarted after " + reset.String())
+	} else {
+		runner.logger.Info("Started after " + reset.String())
+	}
 
 	runner.picoW = controller.NewPicoW(controller.PicoConfig{
 		SSID:     config.SSID,
@@ -70,6 +77,7 @@ func NewRunner(config RunnerConfig) Runner {
 }
 
 func (this *PicoRunner) Start() {
+	defer component.Recover("main loop")
 	if !this.config.Touch.Valid() {
 		calibration, _ := json.Marshal(this.ui.Calibrate())
 		this.logger.Info(`Touch calibrated, add to config.json: "Touch": ` + string(calibration))
@@ -79,11 +87,16 @@ func (this *PicoRunner) Start() {
 	// Wi-Fi setup takes seconds (or over a minute when it fails); the cube and the screen keep running.
 	links := make(chan desktopLink, 1)
 	go func() {
+		defer component.Recover("Wi-Fi setup")
 		server, err := this.connectAndListen()
 		links <- desktopLink{server, err}
 	}()
 
+	// Started only now: the touch calibration above waits for taps. Fed from this loop alone, so a
+	// stuck loop or a halted chip restarts the Pico.
+	component.StartWatchdog()
 	for {
+		component.SetStage(component.StageLink)
 		select {
 		case link := <-links:
 			this.startLink(link)
@@ -91,8 +104,12 @@ func (this *PicoRunner) Start() {
 		}
 
 		now := common.Millis()
+		component.FeedWatchdog(now)
+		component.SetStage(component.StageCube)
 		this.cube.Poll(now)
+		component.SetStage(component.StageDesktop)
 		this.handleRequest()
+		component.SetStage(component.StageScreen)
 		this.ui.Update(now)
 		time.Sleep(time.Millisecond)
 	}

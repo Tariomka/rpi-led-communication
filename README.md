@@ -35,6 +35,10 @@ go run . monitor [port]  # USB serial log
 
 The Makefile targets (`make build`, `make flash`, `make monitor`) do the same.
 
+# Restarts and diagnostics
+
+A hardware watchdog restarts the Pico when the main loop stalls for 5 s or the chip halts, and the brown-out detector resets it when the core supply drops. A panic in any goroutine is caught, printed to USB and followed by a restart. The first log line after a start names the cause (`power-on`, `reset button`, `forced reset` after flashing, `watchdog timeout in <main loop stage>`, `crash: <goroutine>: <panic>`, or `brown-out` when the RAM of the previous run survived) and how long the previous run lasted. It goes to USB, the screen's Log tab and the desktop's console history.
+
 # Troubleshooting
 
 1. Can't monitor Pico board using USB connection on Linux?

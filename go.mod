@@ -5,7 +5,7 @@ go 1.27.2
 // tinygo 0.43.0
 
 require (
-	github.com/Tariomka/led-common-lib v0.5.0
+	github.com/Tariomka/led-common-lib v0.5.1
 	github.com/soypat/cyw43439 v0.1.2-0.20261015151841-318d5aff4d24
 	github.com/soypat/seqs v0.0.0-20260125140838-2c1c6b1bd69e
 	tinygo.org/x/drivers v0.36.0

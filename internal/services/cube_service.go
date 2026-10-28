@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strings"
 
-	libcommon "github.com/Tariomka/led-common-lib/pkg/common"
 	"github.com/Tariomka/led-common-lib/pkg/communication/uart"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 )
@@ -146,7 +145,7 @@ func (this *CubeService) Cartoon(index int) error { return this.send(uart.GetCom
 
 func (this *CubeService) send(command []byte) error {
 	if this.uploading {
-		return libcommon.ErrUploadBusy
+		return common.ErrUploadBusy
 	}
 	if _, err := this.port.Write(command); err != nil {
 		return err
@@ -160,13 +159,13 @@ func (this *CubeService) send(command []byte) error {
 // OnProgress and OnResult.
 func (this *CubeService) BeginUpload(size int) {
 	if this.uploading {
-		this.report(false, libcommon.ErrUploadBusy)
+		this.report(false, common.ErrUploadBusy)
 		return
 	}
 
 	now := common.Millis()
 	// Any other error has already failed the upload and is reported by tickUpload.
-	if err := this.upload.Begin(size, now); errors.Is(err, libcommon.ErrUploadSize) {
+	if err := this.upload.Begin(size, now); errors.Is(err, common.ErrUploadSize) {
 		this.report(false, err)
 		return
 	}

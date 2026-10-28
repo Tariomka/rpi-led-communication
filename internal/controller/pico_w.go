@@ -3,7 +3,6 @@ package controller
 import (
 	"log/slog"
 	"machine"
-	"net"
 	"net/netip"
 
 	"github.com/Tariomka/rpi-led-communication/internal/component"
@@ -44,7 +43,7 @@ func (this *PicoW) Connect() error {
 		this.config.Hostname)
 }
 
-func (this *PicoW) GetListener() (net.Listener, error) {
+func (this *PicoW) GetListener() (*component.Listener, error) {
 	return this.wirelessChip.GetListener(this.config.Port)
 }
 

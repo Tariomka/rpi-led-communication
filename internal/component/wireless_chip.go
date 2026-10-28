@@ -4,30 +4,43 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"runtime"
 	"time"
 
 	"github.com/Tariomka/rpi-led-communication/internal/common"
 	"github.com/soypat/cyw43439"
-	"github.com/soypat/seqs/eth/dhcp"
-	"github.com/soypat/seqs/stacks"
+	"github.com/soypat/lneto"
+	"github.com/soypat/lneto/tcp"
+	"github.com/soypat/lneto/tcp/rto"
+	"github.com/soypat/lneto/x/xnet"
 )
 
 const (
-	maxRetries    = 5
-	queueSize     = 3
-	tcpBufferSize = uint16(512) // MTU - ethhdr - iphdr - tcphdr
-
 	dhcpAttempts = 3
 	dhcpTimeout  = 10 * time.Second
+
+	packetIdleSleep = 5 * time.Millisecond
 )
 
 var ledStatus bool
 
+var start = time.Now()
+
+func nanotime() int64 { return int64(time.Since(start)) }
+
+// backoff is the wait between polls while a TCP read, write or stack request has nothing to do;
+// capped low so desktop messages are not delayed.
+func backoff(consecutive uint) time.Duration {
+	if consecutive == 0 {
+		return lneto.BackoffFlagGosched
+	}
+
+	return time.Millisecond
+}
+
 type WirelessChip struct {
 	device *cyw43439.Device // (CYW43439) WiFi + Bluetooth
-	stack  *stacks.PortStack
-	dhcp   *dhcp.ClientState
+	stack  xnet.StackAsync
+	ready  bool // stack configured
 
 	logger *slog.Logger
 }
@@ -57,7 +70,7 @@ func (this *WirelessChip) Connect(ssid, pass, staticIp, hostname string) error {
 	}
 
 	this.join(ssid, pass)
-	if err := this.configureTcpStack(); err != nil {
+	if err := this.configureStack(hostname); err != nil {
 		return err
 	}
 
@@ -65,36 +78,53 @@ func (this *WirelessChip) Connect(ssid, pass, staticIp, hostname string) error {
 
 	// Even if DHCP fails to provide an IP, connection is still usable
 	// and static IP is used as a fallback
-	return this.dhcpRequest(hostname, address)
+	return this.dhcpRequest(address)
 }
 
-func (this *WirelessChip) GetListener(listenPort uint16) (net.Listener, error) {
-	if this.stack == nil {
+// GetListener starts accepting desktop connections on listenPort.
+func (this *WirelessChip) GetListener(listenPort uint16) (*Listener, error) {
+	if !this.ready {
 		return nil, common.ErrNoInternetConnection
 	}
 
-	listener, err := stacks.NewTCPListener(this.stack, stacks.TCPListenerConfig{
-		MaxConnections: 3,
-		ConnTxBufSize:  tcpBufferSize,
-		ConnRxBufSize:  tcpBufferSize,
+	pool, err := this.stack.NewTCPPool(xnet.TCPPoolConfig{
+		PoolSize:           2,
+		QueueSize:          3,
+		TxBufSize:          1024,
+		RxBufSize:          4096,
+		EstablishedTimeout: 5 * time.Second,
+		ClosingTimeout:     5 * time.Second,
+		NewBackoff:         func() lneto.BackoffStrategy { return backoff },
+		NewPolicy:          newRetransmitTimer,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if err = listener.StartListening(listenPort); err != nil {
+	listener := &Listener{pool: pool}
+	if err := listener.tcp.Reset(listenPort, pool); err != nil {
 		return nil, err
 	}
-
+	if err := this.stack.RegisterListenerTCP(&listener.tcp); err != nil {
+		return nil, err
+	}
 	return listener, nil
+}
+
+// newRetransmitTimer gives each connection the RFC 6298 retransmission timer; without a policy
+// lneto never retransmits.
+func newRetransmitTimer() tcp.Policy {
+	timer := new(rto.Timer)
+	timer.Configure(nanotime)
+	return timer
 }
 
 // Addr is the IP address in use, invalid before Connect.
 func (this *WirelessChip) Addr() netip.Addr {
-	if this.stack == nil {
+	if !this.ready {
 		return netip.Addr{}
 	}
-	return this.stack.Addr()
+	return netip.AddrFrom4(this.stack.Addr4())
 }
 
 func (this *WirelessChip) Blink() {
@@ -125,178 +155,117 @@ func (this *WirelessChip) join(ssid, password string) {
 	}
 }
 
-func (this *WirelessChip) configureTcpStack() error {
+func (this *WirelessChip) configureStack(hostname string) error {
 	mac, err := this.device.HardwareAddr6()
 	if err != nil {
 		return err
 	}
-
-	this.stack = stacks.NewPortStack(stacks.PortStackConfig{
-		MAC:             mac,
-		MaxOpenPortsUDP: 1,
-		MaxOpenPortsTCP: 1,
-		MTU:             cyw43439.MTU,
-		Logger:          common.NewNoopLogger(),
-	})
-	this.device.RecvEthHandle(func(pkt []byte) { this.stack.RecvEth(pkt) })
-	return nil
-}
-
-func (this *WirelessChip) dhcpRequest(hostname string, address netip.Addr) error {
-	for attempt := 1; attempt <= dhcpAttempts; attempt++ {
-		this.logger.Info("DHCP: requesting an address", "attempt", attempt)
-		dhcpClient := stacks.NewDHCPClient(this.stack, dhcp.DefaultClientPort)
-		err := dhcpClient.BeginRequest(stacks.DHCPRequestConfig{
-			RequestedAddr: address,
-			Xid:           uint32(time.Now().UnixNano()) | 1, // must be non-zero
-			Hostname:      hostname,
-		})
-		if err != nil {
-			return err
-		}
-
-		deadline := time.Now().Add(dhcpTimeout)
-		for dhcpClient.State() != dhcp.StateBound && time.Now().Before(deadline) {
-			time.Sleep(100 * time.Millisecond)
-		}
-		if dhcpClient.State() == dhcp.StateBound {
-			this.dhcpBound(dhcpClient)
-			return nil
-		}
-
-		this.logger.Warn("DHCP: no answer", "timeout", dhcpTimeout.String())
-		dhcpClient.Abort()
-		time.Sleep(200 * time.Millisecond) // lets the packet loop drop the aborted client
-		this.stack.CloseUDP(dhcp.DefaultClientPort)
+	if hostname == "" {
+		hostname = "pico" // the stack rejects an empty hostname
 	}
 
-	if !address.IsValid() {
-		this.logger.Error("DHCP: failed and no static IP is configured")
+	err = this.stack.Reset(xnet.StackConfig{
+		HardwareAddress:   mac,
+		Hostname:          hostname,
+		RandSeed:          nanotime() | 1, // must be non-zero
+		MaxActiveTCPPorts: 1,
+		MaxActiveUDPPorts: 1,
+		MTU:               cyw43439.MTU,
+		PassivePeers:      4, // MACs learned from incoming packets, used to answer desktops
+		ICMPQueueLimit:    2,
+		Nanotime:          nanotime,
+	})
+	if err != nil {
+		return err
+	}
+	this.ready = true
+	this.device.RecvEthHandle(func(pkt []byte) { this.stack.IngressEthernet(pkt) })
+	return this.stack.EnableICMP(true) // answers ping, handy to check the link
+}
+
+func (this *WirelessChip) dhcpRequest(address netip.Addr) error {
+	var requested [4]byte
+	if address.IsValid() && address.Is4() {
+		requested = address.As4()
+	}
+
+	this.logger.Info("DHCP: requesting an address", "max attempts", dhcpAttempts)
+	retrying := this.stack.StackRetrying(backoff)
+	results, err := retrying.DoDHCPv4(requested, dhcpTimeout, dhcpAttempts)
+	if err == nil {
+		this.dhcpBound(retrying, results)
+		return nil
+	}
+
+	this.logger.Warn("DHCP: no answer", "error", err.Error())
+	if !address.IsValid() || !address.Is4() {
+		this.logger.Error("DHCP: failed and no static IPv4 is configured")
 		return common.ErrDhcpRequestFailed
 	}
 
 	this.logger.Warn("DHCP: failed, using the static IP", "ip", address.String())
-	this.stack.SetAddr(address)
-	return nil
+	this.stack.SetSubnet4(address.As4(), 24)
+	return this.stack.SetAddr4(address.As4())
 }
 
-func (this *WirelessChip) dhcpBound(dhcpClient *stacks.DHCPClient) {
-	var primaryDNS netip.Addr
-	dnsServers := dhcpClient.DNSServers()
-	if len(dnsServers) > 0 {
-		primaryDNS = dnsServers[0]
+func (this *WirelessChip) dhcpBound(retrying xnet.StackRetrying, results *xnet.DHCPResults) {
+	this.logger.Info("DHCP: bound",
+		"ip", netip.AddrFrom4(results.AssignedAddr4).String(),
+		"router", results.Router.String(),
+		"subnet", results.Subnet.String(),
+		"lease", time.Duration(results.TLease)*time.Second)
+	if err := this.stack.AssimilateDHCPResults(results); err != nil {
+		this.logger.Error("DHCP: results rejected", "error", err.Error())
+		return
 	}
-	ip := dhcpClient.Offer()
-	this.logger.Info("DHCP: bound", "ip", ip.String(), "router", dhcpClient.Router().String())
-	this.logger.Debug(
-		"DHCP complete",
-		slog.Uint64("cidrbits", uint64(dhcpClient.CIDRBits())),
-		slog.String("ourIP", ip.String()),
-		slog.String("dns", primaryDNS.String()),
-		slog.String("broadcast", dhcpClient.BroadcastAddr().String()),
-		slog.String("gateway", dhcpClient.Gateway().String()),
-		slog.String("router", dhcpClient.Router().String()),
-		slog.String("dhcp", dhcpClient.DHCPServer().String()),
-		slog.String("hostname", string(dhcpClient.Hostname())),
-		slog.Duration("lease", dhcpClient.IPLeaseTime()),
-		slog.Duration("renewal", dhcpClient.RenewalTime()),
-		slog.Duration("rebinding", dhcpClient.RebindingTime()),
-	)
 
-	this.stack.SetAddr(ip) // It's important to set the IP address after DHCP completes.
+	// Only traffic leaving the subnet needs the router's MAC; desktops are on the LAN.
+	gateway, err := retrying.DoResolveHardwareAddress6(results.Router, 500*time.Millisecond, 4)
+	if err != nil {
+		this.logger.Warn("ARP: router not resolved", "error", err.Error())
+		return
+	}
+	this.stack.SetGatewayHardwareAddr(gateway)
 }
 
-// This was taken from the example and refactored
 func (this *WirelessChip) handlePackets() {
-	queue := newPacketQueue()
+	defer Recover("Wi-Fi packet loop")
+	buffer := make([]byte, cyw43439.MaxFrameSize)
 	for {
-		runtime.Gosched() // The scheduler is cooperative: let the main loop run between packets.
-		stallRx := !this.isPacketAvailable()
-		queue.enqueue(this.stack.HandleEth)
-
-		stallTx := queue.isQueueEmpty()
-		if stallTx {
-			if stallRx {
-				time.Sleep(50 * time.Millisecond) // Avoid busy waiting when both Rx and Tx stall.
-			}
-			continue
-		}
-
-		queue.sendQueued(this.device.SendEth)
-	}
-}
-
-func (this *WirelessChip) isPacketAvailable() bool {
-	gotPacket, _ := this.device.PollOne()
-	return gotPacket
-}
-
-type packetInstance struct {
-	bufferLen int
-	buffer    [cyw43439.MTU]byte
-	retries   int
-}
-
-func newPacketInstance() packetInstance {
-	return packetInstance{
-		bufferLen: 0,
-		buffer:    [cyw43439.MTU]byte{},
-		retries:   0,
-	}
-}
-
-type packetQueue [queueSize]packetInstance
-
-func newPacketQueue() *packetQueue {
-	return &packetQueue{}
-}
-
-func (this *packetQueue) clean(index int) {
-	this[index] = packetInstance{}
-}
-
-func (this *packetQueue) enqueue(handleEth func([]byte) (int, error)) {
-	for index := range this {
-		if this[index].retries != 0 {
-			continue // Packet currently queued for retransmission.
-		}
-		var err error
-		buf := this[index].buffer[:]
-		this[index].bufferLen, err = handleEth(buf)
+		received, _ := this.device.PollOne()
+		n, err := this.stack.EgressEthernet(buffer)
 		if err != nil {
-			this[index].bufferLen = 0
-			continue
+			this.logger.Debug("Wi-Fi: egress failed", "error", err.Error())
 		}
-		if this[index].bufferLen == 0 {
-			break
-		}
-	}
-}
-
-func (this *packetQueue) sendQueued(sendEth func([]byte) error) {
-	for index := range this {
-		n := this[index].bufferLen
-		if n <= 0 {
-			continue
-		}
-		err := sendEth(this[index].buffer[:n])
-		if err != nil {
-			// Queue packet for retransmission.
-			this[index].retries++
-			if this[index].retries > maxRetries {
-				this.clean(index)
+		if n > 0 {
+			if err := this.device.SendEth(buffer[:n]); err != nil {
+				this.logger.Debug("Wi-Fi: send failed", "error", err.Error())
 			}
-		} else {
-			this.clean(index)
+		}
+		if !received && n == 0 {
+			time.Sleep(packetIdleSleep)
 		}
 	}
 }
 
-func (this *packetQueue) isQueueEmpty() bool {
-	for index := range this {
-		if this[index].bufferLen > 0 {
-			return false
+// Listener accepts desktop connections; connections are recycled by the pool once closed.
+type Listener struct {
+	tcp  tcp.Listener
+	pool *xnet.TCPPool
+}
+
+// Accept blocks until a connection is established or the listener is closed.
+func (this *Listener) Accept() (tcp.ConnHandle, error) {
+	for this.tcp.NumberOfReadyToAccept() == 0 {
+		if this.tcp.LocalPort() == 0 {
+			return tcp.ConnHandle{}, net.ErrClosed
 		}
+		this.pool.CheckTimeouts()
+		time.Sleep(packetIdleSleep)
 	}
-	return true
+	return this.tcp.TryAccept()
+}
+
+func (this *Listener) Close() error {
+	return this.tcp.Close()
 }

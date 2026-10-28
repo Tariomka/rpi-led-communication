@@ -4,5 +4,13 @@
         "GOARCH": "arm",
         "GOROOT": "C:\\Users\\Arturas.Deltuvas\\AppData\\Local\\tinygo\\goroot-68d3ab42545da1b53669f025459383ce95b7e7531032fd47734938319519d349",
         "GOFLAGS": "-tags=cortexm,baremetal,linux,arm,rp2040,rp,pico,pico-w,cyw43439,tinygo,purego,osusergo,math_big_pure_go,gc.conservative,scheduler.tasks,tinygo.unwind.setjmp,serial.usb,tinygo.unicore"
-    }
+    },
+    "cSpell.words": [
+        "lneto",
+        "nanotime",
+        "soypat",
+        "Tariomka",
+        "tinyfont",
+        "tinygo"
+    ]
 }

@@ -4,11 +4,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 
-	libcommon "github.com/Tariomka/led-common-lib/pkg/common"
 	"github.com/Tariomka/led-common-lib/pkg/communication/tcp"
 	"github.com/Tariomka/rpi-led-communication/internal/common"
+	"github.com/Tariomka/rpi-led-communication/internal/component"
 )
 
 const outboxSize = 256 // fits the Hello and the whole line history sent on connect
@@ -29,7 +28,7 @@ type Request struct {
 
 // Server serves one desktop at a time; a new connection replaces the current one.
 type Server struct {
-	listener net.Listener
+	listener *component.Listener
 	logger   *slog.Logger
 	current  *connection
 	buffer   []byte
@@ -39,7 +38,7 @@ type Server struct {
 	outbox   chan tcp.Message
 }
 
-func NewServer(listener net.Listener, logger *slog.Logger) (*Server, error) {
+func NewServer(listener *component.Listener, logger *slog.Logger) (*Server, error) {
 	if listener == nil {
 		return nil, common.ErrNoListener
 	}
@@ -72,6 +71,7 @@ func (this *Server) Send(message tcp.Message) {
 
 // Start accepts connections until the listener fails.
 func (this *Server) Start() {
+	defer component.Recover("server")
 	this.logger.Debug("Starting up server")
 	for {
 		conn, err := this.listener.Accept()
@@ -102,9 +102,8 @@ func (this *Server) Stop() {
 }
 
 func (this *Server) serve(conn *connection) {
-	// RemoteAddr is empty once the client is gone, so it is read early.
-	address := conn.RemoteAddr().String()
-	this.logger.Info("Desktop connected", "address", address)
+	defer component.Recover("server reader")
+	this.logger.Info("Desktop connected", "address", conn.remote)
 
 	go this.write(conn)
 	this.request(Request{Kind: Connected})
@@ -113,15 +112,15 @@ func (this *Server) serve(conn *connection) {
 		switch {
 		case err == nil:
 			this.request(Request{Kind: Received, Message: message})
-		case errors.Is(err, libcommon.ErrUnsupportedVersion):
+		case errors.Is(err, common.ErrUnsupportedVersion):
 			this.logger.Warn("Unsupported protocol version", "version", message.Version, "type", message.Type)
-		case errors.Is(err, libcommon.ErrPayloadTooLarge):
+		case errors.Is(err, common.ErrPayloadTooLarge):
 			this.logger.Warn("Message too large, skipped", "type", message.Type)
 		default:
 			if err == io.EOF {
-				this.logger.Info("Desktop disconnected", "address", address)
+				this.logger.Info("Desktop disconnected", "address", conn.remote)
 			} else {
-				this.logger.Error("Desktop connection failed", "address", address, "error", err)
+				this.logger.Error("Desktop connection failed", "address", conn.remote, "error", err)
 			}
 			conn.close()
 			this.request(Request{Kind: Disconnected})
@@ -132,6 +131,7 @@ func (this *Server) serve(conn *connection) {
 }
 
 func (this *Server) write(conn *connection) {
+	defer component.Recover("server writer")
 	for {
 		select {
 		case <-conn.closed:
@@ -141,7 +141,7 @@ func (this *Server) write(conn *connection) {
 
 		select {
 		case message := <-this.outbox:
-			if err := tcp.Write(conn, message); err != nil {
+			if tcp.Write(conn, message) != nil {
 				conn.close()
 				return
 			}

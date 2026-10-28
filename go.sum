@@ -2,10 +2,10 @@ github.com/Tariomka/led-common-lib v0.5.1 h1:76Z04Ob731nMuS3stMBY+VnI2vepyfF06+B
 github.com/Tariomka/led-common-lib v0.5.1/go.mod h1:0ZVB8hU96roNqLXBi9vCIHpkkEXR0Vg8cXepPjbmMC0=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 h1:El6M4kTTCOh6aBiKaUGG7oYTSPP8MxqL4YI3kZKwcP4=
 github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510/go.mod h1:pupxD2MaaD3pAXIBCelhxNneeOaAeabZDe5s4K6zSpQ=
-github.com/soypat/cyw43439 v0.1.2-0.20261015151841-318d5aff4d24 h1:ogHBqA+gfk84v6C/YXenRmKn4E6VXf8hNGFMKh2FCWw=
-github.com/soypat/cyw43439 v0.1.2-0.20261015151841-318d5aff4d24/go.mod h1:m6h3w6qF/iKajXo3mo/Kh0xqfaELSvdXX4JIpv8TO8M=
-github.com/soypat/lneto v0.3.2 h1:iUFeRSq2czT7Db6MMOsAnMCBlKCqvIr941zsNf9dcu0=
-github.com/soypat/lneto v0.3.2/go.mod h1:Be5PjwoYukvHFiUXxpYi8+ppH2F/gw/vjGBvFdv+Ti8=
+github.com/soypat/cyw43439 v0.2.0 h1:xG85waKoeFgwToHMdExVPMZdITNdbdO9gUuDZk3WrHs=
+github.com/soypat/cyw43439 v0.2.0/go.mod h1:PXS9E4wJ2f3BK3Vqf//gw1tE2kipMlNuubNm5au5RGc=
+github.com/soypat/lneto v0.4.0 h1:oBTcMnhEIBERXmAfwK4uDpItRaF7RiT1K2pljFVxtQc=
+github.com/soypat/lneto v0.4.0/go.mod h1:Be5PjwoYukvHFiUXxpYi8+ppH2F/gw/vjGBvFdv+Ti8=
 github.com/soypat/seqs v0.0.0-20260125140838-2c1c6b1bd69e h1:xF3R+8683ngGNUeIy8PHJZiJZ/XIw+hlGgxg572P0Mw=
 github.com/soypat/seqs v0.0.0-20260125140838-2c1c6b1bd69e/go.mod h1:oCVCNGCHMKoBj97Zp9znLbQ1nHxpkmOY9X+UAGzOxc8=
 github.com/tinygo-org/pio v0.3.0 h1:opEnOtw58KGB4RJD3/n/Rd0/djYGX3DeJiXLI6y/yDI=

@@ -251,14 +251,12 @@
   <text class="n" x="430" y="226" font-size="9">UART0_RX ← cube TXD</text>
   <text class="n" x="1030" y="226" font-size="9">+5V_CUBE → VSYS</text>
   <text class="n" x="1030" y="246" font-size="9">CUBE_GND</text>
-  <rect x="1020" y="700" width="465" height="160" fill="none" stroke="#000" stroke-width="1"/>
-  <text class="h" x="1030" y="715">Notes</text>
-  <text class="t" x="1030" y="729" font-size="9">1. All signals are 3.3 V CMOS; no level shifting anywhere.</text>
-  <text class="t" x="1030" y="741" font-size="9">2. UART0 115200 8N1 to the cube's USART1. Cube TXD → GP1, cube RXD ← GP0 (crossed). The 4th wire of the</text>
-  <text class="t" x="1030" y="753" font-size="9">    serial cable puts the cube's +5 V on GP2 (pin 4). RP2040 GPIOs are not 5 V tolerant: cut this wire or</text>
-  <text class="t" x="1030" y="765" font-size="9">    leave the cable position empty. GP2 is never configured by the firmware.</text>
-  <text class="t" x="1030" y="777" font-size="9">3. Power: cube base board 5 V → VSYS (39), GND → pin 38. If USB is plugged in at the same time, put a</text>
-  <text class="t" x="1030" y="789" font-size="9">    Schottky diode in the 5 V lead so the two supplies cannot fight (Pico W datasheet, powering section).</text>
+  <rect x="1020" y="724" width="465" height="136" fill="none" stroke="#000" stroke-width="1"/>
+  <text class="h" x="1030" y="739">Notes</text>
+  <text class="t" x="1030" y="753" font-size="9">1. All signals are 3.3 V CMOS; no level shifting anywhere.</text>
+  <text class="t" x="1030" y="765" font-size="9">2. UART0 115200 8N1 to the cube's USART1. Cube TXD → GP1, cube RXD ← GP0 (crossed). The 4th wire of the</text>
+  <text class="t" x="1030" y="777" font-size="9">    serial cable puts the cube's +5 V on GP2 (pin 4).</text>
+  <text class="t" x="1030" y="789" font-size="9">3. Power: cube base board 5 V → VSYS (39), GND → pin 38.</text>
   <text class="t" x="1030" y="801" font-size="9">4. SPI1 to the ILI9341: 40 MHz, mode 2 (CPOL 1, CPHA 0), DMA ch 1 with chaining off. SDO → GP12 is never</text>
   <text class="t" x="1030" y="813" font-size="9">    read; FM (RDX) → GP9 is wired but not driven. GP14 / GP15 drive VCC / BL high at start-up.</text>
   <text class="t" x="1030" y="825" font-size="9">5. XPT2046 uses software SPI on GP16–GP20; TPEN is low while touched; its GND returns on pin 23.</text>

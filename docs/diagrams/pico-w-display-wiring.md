@@ -110,7 +110,7 @@ crossing with a hop.
 ## Pico W header view
 
 ```
-                              ┌─────[USB]─────┐
+                           ┌─────[USB]─────┐
    cube RXD   ◄── GP0   1 ─┤               ├─ 40 VBUS
    cube TXD   ──► GP1   2 ─┤               ├─ 39 VSYS  ◄── cube base board 5 V
    cube GND       GND   3 ─┤               ├─ 38 GND   ◄── cube base board GND
@@ -131,7 +131,7 @@ crossing with a hop.
    J1-2  GND  ─── GND  18 ─┤               ├─ 23 GND  ─── J3-6 GND
    J1-1  VCC  ◄── GP14 19 ─┤               ├─ 22 GP17 ──► J3-2 TCS
    J1-3  BL   ◄── GP15 20 ─┤               ├─ 21 GP16 ◄── J3-4 TMISO
-                              └───────────────┘
+                           └───────────────┘
 ```
 
 ## Electrical notes
